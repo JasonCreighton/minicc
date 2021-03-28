@@ -22,7 +22,7 @@ and emit_expr expr =
 			print_string "xchg rax, rbx\n";
 			print_string "idiv rbx\n";
 		end
-	| Neg e1 -> (emit_expr e1; print_string "neg rbx\n")
+	| Neg e1 -> (emit_expr e1; print_string "neg rax\n")
 
 let emit expr =
 	begin
