@@ -1,11 +1,11 @@
-SOURCES = parser.mli parser.ml lexer.ml calc.ml
+SOURCES = ast.ml parser.mli parser.ml lexer.ml calc.ml
 
 all: calc
 
 clean:
-	rm -f calc parser.ml lexer.ml *.cmi *.cmx *.o
+	rm -f calc parser.ml parser.mli lexer.ml *.cmi *.cmx *.o
 
-parser.ml: parser.mly
+parser.ml parser.mli: parser.mly
 	ocamlyacc parser.mly
 
 lexer.ml: lexer.mll
