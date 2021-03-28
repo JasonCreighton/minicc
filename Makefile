@@ -1,4 +1,4 @@
-SOURCES = ast.ml parser.mli parser.ml lexer.ml calc.ml
+SOURCES = ast.ml amd64.ml parser.mli parser.ml lexer.ml calc.ml
 
 all: calc
 
