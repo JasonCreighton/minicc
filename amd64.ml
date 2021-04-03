@@ -1,35 +1,59 @@
 open Printf
 open Ast
 
-let rec put_in_rbx_rax e1 e2 =
-	begin
-		emit_expr e1;
-		print_string "push rax\n";
-		emit_expr e2;
-		print_string "pop rbx\n";
-	end
+let call_registers = ["rdi"; "rsi"; "rdx"; "rcx"; "r8"; "r9"]
 
-and emit_expr expr =
-	match expr with
-	| Lit n -> printf "mov rax, %d\n" n;
-	| Add(e1, e2) -> (put_in_rbx_rax e1 e2; print_string "add rax, rbx\n")
-	| Sub(e1, e2) -> (put_in_rbx_rax e1 e2; print_string "sub rbx, rax\nmov rax, rbx\n")
-	| Mul(e1, e2) -> (put_in_rbx_rax e1 e2; print_string "imul rax, rbx\n")
-	| Div(e1, e2) ->
+let id_of_string_lit lit_table s =
+	match Hashtbl.find_opt lit_table s with
+	| Some id -> id
+	| None ->
+		let new_id = Hashtbl.length lit_table in
+		Hashtbl.add lit_table s new_id;
+		new_id
+
+let emit_expr expr =
+	let lit_table = Hashtbl.create 100 in
+	let rec put_in_rbx_rax e1 e2 =
 		begin
-			put_in_rbx_rax e1 e2;
-			print_string "xor rdx, rdx\n"; (* FIXME: Should sign extend instead, I think? *)
-			print_string "xchg rax, rbx\n";
-			print_string "idiv rbx\n";
+			emit' e1;
+			print_string "push rax\n";
+			emit' e2;
+			print_string "pop rbx\n";
 		end
-	| Neg e1 -> (emit_expr e1; print_string "neg rax\n")
+	and emit' expr =
+		match expr with
+		| Lit n -> printf "mov rax, %d\n" n;
+		| LitString s -> printf "mov rax, string_lit_%d\n" (id_of_string_lit lit_table s)
+		| Add(e1, e2) -> (put_in_rbx_rax e1 e2; print_string "add rax, rbx\n")
+		| Sub(e1, e2) -> (put_in_rbx_rax e1 e2; print_string "sub rbx, rax\nmov rax, rbx\n")
+		| Mul(e1, e2) -> (put_in_rbx_rax e1 e2; print_string "imul rax, rbx\n")
+		| Div(e1, e2) ->
+			begin
+				put_in_rbx_rax e1 e2;
+				print_string "xor rdx, rdx\n"; (* FIXME: Should sign extend instead, I think? *)
+				print_string "xchg rax, rbx\n";
+				print_string "idiv rbx\n";
+			end
+		| Neg e1 -> (emit' e1; print_string "neg rax\n")
+		(* FIXME: Don't hard-code number of arguments! *)
+		| Call(func_name, args) ->
+			begin
+				(* Evaluate arguments onto stack *)
+				List.iter (fun a -> emit' a; print_string "push rax\n") (List.rev args);
+
+				(* Pop stack values into calling convention registers *)
+				List.iteri (fun i reg -> if i < (List.length args) then printf "pop %s\n" reg else ()) call_registers;
+
+				(* FIXME: We will have to distinguish between library calls and user-defined calls because of the PLT *)
+				printf "call %s WRT ..plt\n" func_name;
+			end
+	in
+	emit' expr; 
+	(* Return string literal table *)
+	lit_table
 
 let emit expr =
 	begin
-		print_string "section .data\n";
-		print_string "format:\n";
-		print_string "db \"%d\", 10, 0\n";
-
 		print_string "section .text\n";
 
 		print_string "global main\n";
@@ -39,13 +63,20 @@ let emit expr =
 		print_string "push rbp\n";
 		print_string "mov rbp, rsp\n";
 
-		emit_expr expr;
+		let lit_table = emit_expr expr in
 
-		print_string "mov rdi, format\n";
-		print_string "mov rsi, rax\n";
-		print_string "call printf WRT ..plt\n";
 		print_string "mov rax, 0\n";
 		print_string "pop rbp\n";
 		print_string "ret\n";
 
+		(* Output string literals *)
+		print_string "section .data\n";
+		Hashtbl.iter (fun lit id ->
+			printf "string_lit_%d:\n" id;
+			print_string "db ";
+			String.iter (fun c -> printf "%d, " (Char.code c)) lit;
+
+			(* NUL terminate *)
+			print_string "0\n";
+		) lit_table;
 	end
