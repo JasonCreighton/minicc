@@ -1,4 +1,4 @@
-%token <int> INT
+%token <int> LITERAL_INT
 %token <string> IDENTIFIER
 %token <string> LITERAL_STRING
 %token PLUS MINUS TIMES DIV
@@ -16,7 +16,7 @@ main:
     expr EOL                { $1 }
 ;
 expr:
-    INT                     { Ast.Lit $1 }
+    LITERAL_INT             { Ast.Lit $1 }
   | LITERAL_STRING          { Ast.LitString $1 }
   | LPAREN expr RPAREN      { $2 }
   | expr PLUS expr          { Ast.Add ($1, $3) }

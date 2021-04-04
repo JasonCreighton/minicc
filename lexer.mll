@@ -9,7 +9,7 @@ rule token = parse
     [' ' '\t']     { token lexbuf }     (* skip blanks *)
   | ['\n' ]        { EOL }
   | id as lxm      { IDENTIFIER(lxm) }
-  | digit+ as lxm { INT(int_of_string lxm) }
+  | digit+ as lxm { LITERAL_INT(int_of_string lxm) }
   | '"' ([^ '"']* as str) '"' { LITERAL_STRING(str) }
   | '+'            { PLUS }
   | '-'            { MINUS }

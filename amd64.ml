@@ -13,29 +13,31 @@ let id_of_string_lit lit_table s =
 
 let emit_expr expr =
 	let lit_table = Hashtbl.create 100 in
-	let rec put_in_rbx_rax e1 e2 =
+	let rec put_in_rax_rbx e1 e2 =
 		begin
-			emit' e1;
-			print_string "push rax\n";
+			(*
+			Note: Evaluate RHS first, so we can end up with the LHS in rax.
+			This makes things nicer for subtraction and division.
+			*)
 			emit' e2;
+			print_string "push rax\n";
+			emit' e1;
 			print_string "pop rbx\n";
 		end
 	and emit' expr =
 		match expr with
 		| Lit n -> printf "mov rax, %d\n" n;
 		| LitString s -> printf "mov rax, string_lit_%d\n" (id_of_string_lit lit_table s)
-		| Add(e1, e2) -> (put_in_rbx_rax e1 e2; print_string "add rax, rbx\n")
-		| Sub(e1, e2) -> (put_in_rbx_rax e1 e2; print_string "sub rbx, rax\nmov rax, rbx\n")
-		| Mul(e1, e2) -> (put_in_rbx_rax e1 e2; print_string "imul rax, rbx\n")
+		| Add(e1, e2) -> (put_in_rax_rbx e1 e2; print_string "add rax, rbx\n")
+		| Sub(e1, e2) -> (put_in_rax_rbx e1 e2; print_string "sub rax, rbx\n")
+		| Mul(e1, e2) -> (put_in_rax_rbx e1 e2; print_string "imul rax, rbx\n")
 		| Div(e1, e2) ->
 			begin
-				put_in_rbx_rax e1 e2;
-				print_string "xor rdx, rdx\n"; (* FIXME: Should sign extend instead, I think? *)
-				print_string "xchg rax, rbx\n";
+				put_in_rax_rbx e1 e2;
+				print_string "cqo\n";
 				print_string "idiv rbx\n";
 			end
 		| Neg e1 -> (emit' e1; print_string "neg rax\n")
-		(* FIXME: Don't hard-code number of arguments! *)
 		| Call(func_name, args) ->
 			begin
 				(* Evaluate arguments onto stack *)
