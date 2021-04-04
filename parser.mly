@@ -24,10 +24,11 @@ expr:
   | expr TIMES expr         { Ast.Mul ($1, $3) }
   | expr DIV expr           { Ast.Div ($1, $3) }
   | MINUS expr %prec UMINUS { Ast.Neg $2 }
-  | IDENTIFIER LPAREN argument_list RPAREN { Ast.Call ($1, $3) }
+  | IDENTIFIER LPAREN RPAREN { Ast.Call ($1, []) }
+  | IDENTIFIER LPAREN argument_list RPAREN { Ast.Call ($1, List.rev $3) }
 ;
 
 argument_list:
     expr { [$1] }
-  | expr COMMA argument_list { $1 :: $3 }
+  | argument_list COMMA expr { $3 :: $1 }
 ;
