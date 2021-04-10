@@ -1,4 +1,6 @@
-type node =
+type decl =
+	| Function of string * node
+and node =
 	| Lit of int
 	| LitString of string
 	| Add of node * node

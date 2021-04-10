@@ -9,8 +9,9 @@ let id    = alpha (alpha|digit)*
 rule token = parse
     [' ' '\t']     { token lexbuf }     (* skip blanks *)
   | ['\n' ]        { EOL }
+  | "int"          { TYPE_INT }
   | id as lxm      { IDENTIFIER(lxm) }
-  | digit+ as lxm { LITERAL_INT(int_of_string lxm) }
+  | digit+ as lxm { LITERAL_INT(int_of_string lxm) }  
   | '"'            { quoted_string [] lexbuf }
   | '+'            { PLUS }
   | '-'            { MINUS }
@@ -18,7 +19,10 @@ rule token = parse
   | '/'            { DIV }
   | '('            { LPAREN }
   | ')'            { RPAREN }
+  | '{'            { LBRACE }
+  | '}'            { RBRACE }
   | ','            { COMMA }
+  | ';'            { SEMICOLON }
   | eof            { raise Eof }
 
 and quoted_string pieces = parse

@@ -1,19 +1,24 @@
 %token <int> LITERAL_INT
 %token <string> IDENTIFIER
 %token <string> LITERAL_STRING
+%token TYPE_INT
 %token PLUS MINUS TIMES DIV
 %token LPAREN RPAREN
+%token LBRACE RBRACE
 %token COMMA
+%token SEMICOLON
 %token EOL
 %left PLUS MINUS        /* lowest precedence */
 %left TIMES DIV         /* medium precedence */
 %nonassoc UMINUS        /* highest precedence */
-%start main             /* the entry point */
-%type <Ast.node> main
+%start decl             /* the entry point */
+%type <Ast.decl> decl
 %type <Ast.node list> argument_list
 %%
-main:
-    expr EOL                { $1 }
+;
+/* Total hack for now to get a minimal function parsing */
+decl:
+	TYPE_INT IDENTIFIER LPAREN RPAREN LBRACE expr SEMICOLON RBRACE { Ast.Function ($2, $6) }
 ;
 expr:
     LITERAL_INT             { Ast.Lit $1 }

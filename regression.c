@@ -1,0 +1,1 @@
+int main() { printf("Hello, world!\nA number: %d\n", 42); }
