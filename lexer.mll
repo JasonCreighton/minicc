@@ -7,8 +7,7 @@ let alpha = ['a'-'z' 'A'-'Z']
 let hex = ['0'-'9' 'a'-'f' 'A'-'F']
 let id    = alpha (alpha|digit)*
 rule token = parse
-    [' ' '\t']     { token lexbuf }     (* skip blanks *)
-  | ['\n' ]        { EOL }
+    [' ' '\t' '\n']     { token lexbuf }     (* skip blanks *)
   | "int"          { TYPE_INT }
   | id as lxm      { IDENTIFIER(lxm) }
   | digit+ as lxm { LITERAL_INT(int_of_string lxm) }  

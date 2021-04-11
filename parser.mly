@@ -13,13 +13,27 @@
 %nonassoc UMINUS        /* highest precedence */
 %start decl             /* the entry point */
 %type <Ast.decl> decl
-%type <Ast.node list> argument_list
 %%
 ;
 /* Total hack for now to get a minimal function parsing */
 decl:
-	TYPE_INT IDENTIFIER LPAREN RPAREN LBRACE expr SEMICOLON RBRACE { Ast.Function ($2, $6) }
+	TYPE_INT IDENTIFIER LPAREN RPAREN compound_statement { Ast.Function ($2, $5) }
 ;
+
+compound_statement:
+    LBRACE RBRACE { Ast.CompoundStmt [] }
+  | LBRACE statement_list RBRACE { Ast.CompoundStmt (List.rev $2) }
+;
+
+statement_list:
+    statement { [$1] }
+  | statement_list statement { $2 :: $1 }
+;
+
+statement:
+	expr SEMICOLON { Ast.ExprStmt $1 }
+;
+
 expr:
     LITERAL_INT             { Ast.Lit $1 }
   | LITERAL_STRING          { Ast.LitString $1 }

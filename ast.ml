@@ -1,11 +1,14 @@
 type decl =
-	| Function of string * node
-and node =
+	| Function of string * stmt
+and stmt =
+    | CompoundStmt of stmt list
+	| ExprStmt of expr
+and expr =
 	| Lit of int
 	| LitString of string
-	| Add of node * node
-	| Sub of node * node
-	| Mul of node * node
-	| Div of node * node
-	| Neg of node
-	| Call of string * node list
+	| Add of expr * expr
+	| Sub of expr * expr
+	| Mul of expr * expr
+	| Div of expr * expr
+	| Neg of expr
+	| Call of string * expr list

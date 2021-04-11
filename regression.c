@@ -1,1 +1,4 @@
-int main() { printf("Hello, world!\nA number: %d\n", 42); }
+int main() {
+	printf("Hello, world!\n");	
+	printf("A number: %d\n", 42);
+}
