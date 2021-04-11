@@ -1,11 +1,11 @@
-SOURCES = ast.ml amd64.ml parser.mli parser.ml lexer.ml calc.ml
+SOURCES = ast.ml amd64.ml parser.mli parser.ml lexer.ml main.ml
 
 .PHONY: all test
 
-all: calc
+all: minicc
 
 clean:
-	rm -f calc parser.ml parser.mli lexer.ml *.cmi *.cmx *.o
+	rm -f minicc parser.ml parser.mli lexer.ml *.cmi *.cmx *.o
 
 parser.ml parser.mli: parser.mly
 	ocamlyacc parser.mly
@@ -13,11 +13,11 @@ parser.ml parser.mli: parser.mly
 lexer.ml: lexer.mll
 	ocamllex lexer.mll
 
-calc: $(SOURCES)
-	ocamlopt -o calc $(SOURCES)
+minicc: $(SOURCES)
+	ocamlopt -o minicc $(SOURCES)
 
-regression.asm: calc regression.c
-	./calc < regression.c > regression.asm	
+regression.asm: minicc regression.c
+	./minicc < regression.c > regression.asm	
 
 regression.o: regression.asm
 	nasm -felf64 regression.asm
