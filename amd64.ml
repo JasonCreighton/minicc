@@ -13,6 +13,7 @@ let id_of_string_lit lit_table s =
 
 let emit_func oc body =
 	let lit_table = Hashtbl.create 100 in
+	let next_label_id = ref 0 in
 	let rec put_in_rax_rbx e1 e2 =
 		begin
 			(*
@@ -28,6 +29,25 @@ let emit_func oc body =
 		match stmt with
 		| ExprStmt expr -> emit_expr expr
 		| CompoundStmt stmts -> List.iter emit_stmt stmts
+		| IfStmt (cond, then_stmt) -> begin
+			let skip_label_id = !next_label_id in
+			next_label_id := !next_label_id + 1;
+			emit_expr cond;
+			output_string oc "cmp rax, 0\n";
+			fprintf oc "je .label_%d\n" skip_label_id;			
+			emit_stmt then_stmt;
+			fprintf oc ".label_%d:\n" skip_label_id;
+		end
+		| IfElseStmt (cond, then_stmt, else_stmt) -> begin
+			let else_label_id = !next_label_id in
+			next_label_id := !next_label_id + 1;
+			emit_expr cond;
+			output_string oc "cmp rax, 0\n";
+			fprintf oc "je .label_%d\n" else_label_id;			
+			emit_stmt then_stmt;
+			fprintf oc ".label_%d:\n" else_label_id;
+			emit_stmt else_stmt;
+		end
 	and emit_expr expr =
 		match expr with
 		| Lit n -> fprintf oc "mov rax, %d\n" n;

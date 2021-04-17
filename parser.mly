@@ -7,10 +7,17 @@
 %token LBRACE RBRACE
 %token COMMA
 %token SEMICOLON
+%token IF
+%token ELSE
 %token EOL
 %left PLUS MINUS        /* lowest precedence */
 %left TIMES DIV         /* medium precedence */
 %nonassoc UMINUS        /* highest precedence */
+
+/* Hack to resolve "dangling else" shift/reduce conflict */
+%nonassoc RPAREN
+%nonassoc ELSE
+
 %start decl             /* the entry point */
 %type <Ast.decl> decl
 %%
@@ -30,8 +37,11 @@ statement_list:
   | statement_list statement { $2 :: $1 }
 ;
 
-statement:
-	expr SEMICOLON { Ast.ExprStmt $1 }
+statement
+  : expr SEMICOLON { Ast.ExprStmt $1 }
+  | compound_statement { $1 }
+  | IF LPAREN expr RPAREN statement { Ast.IfStmt ($3, $5) }
+  | IF LPAREN expr RPAREN statement ELSE statement { Ast.IfElseStmt ($3, $5, $7) }
 ;
 
 expr:
