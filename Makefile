@@ -14,7 +14,7 @@ lexer.ml: lexer.mll
 	ocamllex lexer.mll
 
 minicc: $(SOURCES)
-	ocamlopt -o minicc $(SOURCES)
+	ocamlopt -w +a -o minicc $(SOURCES)
 
 regression.asm: minicc regression.c
 	./minicc < regression.c > regression.asm	
