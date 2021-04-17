@@ -40,7 +40,7 @@ statement_list:
 statement
   : expr SEMICOLON { Ast.ExprStmt $1 }
   | compound_statement { $1 }
-  | IF LPAREN expr RPAREN statement { Ast.IfStmt ($3, $5) }
+  | IF LPAREN expr RPAREN statement { Ast.IfElseStmt ($3, $5, Ast.CompoundStmt []) }
   | IF LPAREN expr RPAREN statement ELSE statement { Ast.IfElseStmt ($3, $5, $7) }
 ;
 

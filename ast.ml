@@ -3,7 +3,6 @@ type decl =
 and stmt =
     | CompoundStmt of stmt list
 	| ExprStmt of expr
-	| IfStmt of expr * stmt
 	| IfElseStmt of expr * stmt * stmt
 and expr =
 	| Lit of int

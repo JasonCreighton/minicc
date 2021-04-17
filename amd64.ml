@@ -29,15 +29,6 @@ let emit_func oc body =
 		match stmt with
 		| ExprStmt expr -> emit_expr expr
 		| CompoundStmt stmts -> List.iter emit_stmt stmts
-		| IfStmt (cond, then_stmt) -> begin
-			let skip_label_id = !next_label_id in
-			next_label_id := !next_label_id + 1;
-			emit_expr cond;
-			output_string oc "cmp rax, 0\n";
-			fprintf oc "je .label_%d\n" skip_label_id;			
-			emit_stmt then_stmt;
-			fprintf oc ".label_%d:\n" skip_label_id;
-		end
 		| IfElseStmt (cond, then_stmt, else_stmt) -> begin
 			let else_label_id = !next_label_id in
 			next_label_id := !next_label_id + 1;
