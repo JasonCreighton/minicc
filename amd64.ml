@@ -14,6 +14,7 @@ let id_of_string_lit lit_table s =
 		new_id
 
 let emit_func oc body =
+	let out_buffer = Buffer.create 4096 in
 	let lit_table = Hashtbl.create 100 in
 	let var_table = Hashtbl.create 100 in
 	let num_stack_locs = ref 0 in
@@ -25,14 +26,20 @@ let emit_func oc body =
 			This makes things nicer for subtraction and division.
 			*)
 			emit_expr e2;
-			output_string oc "push rax\n";
+			asm "push rax";
 			emit_expr e1;
-			output_string oc "pop rbx\n"
+			asm "pop rbx"
 		end
 	and find_var_loc v =
 		match Hashtbl.find_opt var_table v with
 		| Some loc -> loc
 		| None -> raise (Compile_error (sprintf "Undeclared variable '%s'" v))
+	and asm str = begin
+		Buffer.add_char out_buffer '\t';
+		Buffer.add_string out_buffer str;
+		Buffer.add_char out_buffer '\n';
+	end
+	and asm_raw str = Buffer.add_string out_buffer str
 	and emit_stmt stmt =
 		match stmt with
 		| DeclVar v -> begin
@@ -45,67 +52,71 @@ let emit_func oc body =
 			let else_label_id = !next_label_id in
 			next_label_id := !next_label_id + 1;
 			emit_expr cond;
-			output_string oc "cmp rax, 0\n";
-			fprintf oc "je .label_%d\n" else_label_id;			
+			asm "cmp rax, 0";
+			ksprintf asm "je .label_%d" else_label_id;
 			emit_stmt then_stmt;
-			fprintf oc ".label_%d:\n" else_label_id;
+			ksprintf asm_raw ".label_%d:\n" else_label_id;
 			emit_stmt else_stmt;
 		end
 	and emit_expr expr =
 		match expr with
-		| Lit n -> fprintf oc "mov rax, %d\n" n;
-		| LitString s -> fprintf oc "mov rax, string_lit_%d\n" (id_of_string_lit lit_table s)
+		| Lit n -> ksprintf asm "mov rax, %d" n;
+		| LitString s -> ksprintf asm "mov rax, string_lit_%d" (id_of_string_lit lit_table s)
 		| Assign (VarRef v, rhs) ->
 			emit_expr rhs;
-			fprintf oc "mov [rbp - %d], rax\n" (find_var_loc v)
+			ksprintf asm "mov [rbp - %d], rax" (find_var_loc v)
 		| Assign (_, _) -> raise (Compile_error "Assignment to non-lvalue")
-		| VarRef v -> fprintf  oc "mov rax, [rbp - %d]\n" (find_var_loc v)
-		| Add (e1, e2) -> (put_in_rax_rbx e1 e2; output_string oc "add rax, rbx\n")
-		| Sub (e1, e2) -> (put_in_rax_rbx e1 e2; output_string oc "sub rax, rbx\n")
-		| Mul (e1, e2) -> (put_in_rax_rbx e1 e2; output_string oc "imul rax, rbx\n")
+		| VarRef v -> ksprintf asm "mov rax, [rbp - %d]" (find_var_loc v)
+		| Add (e1, e2) -> (put_in_rax_rbx e1 e2; asm "add rax, rbx")
+		| Sub (e1, e2) -> (put_in_rax_rbx e1 e2; asm "sub rax, rbx")
+		| Mul (e1, e2) -> (put_in_rax_rbx e1 e2; asm "imul rax, rbx")
 		| Div (e1, e2) ->
 			begin
 				put_in_rax_rbx e1 e2;
-				output_string oc "cqo\n";
-				output_string oc "idiv rbx\n";
+				asm "cqo";
+				asm "idiv rbx";
 			end
-		| Neg e1 -> (emit_expr e1; output_string oc "neg rax\n")
+		| Neg e1 -> (emit_expr e1; asm "neg rax")
 		| Call(func_name, args) ->
 			begin
 				(* Evaluate arguments onto stack *)
-				List.iter (fun a -> emit_expr a; output_string oc "push rax\n") (List.rev args);
+				List.iter (fun a -> emit_expr a; asm "push rax") (List.rev args);
 
 				(* Pop stack values into calling convention registers *)
-				List.iteri (fun i reg -> if i < (List.length args) then fprintf oc "pop %s\n" reg else ()) call_registers;
+				List.iteri (fun i reg -> if i < (List.length args) then ksprintf asm "pop %s" reg else ()) call_registers;
 
 				(* FIXME: We will have to distinguish between library calls and user-defined calls because of the PLT *)
-				fprintf oc "call %s WRT ..plt\n" func_name;
+				ksprintf asm "call %s WRT ..plt" func_name;
 			end
 	in
 	emit_stmt body; 
-	(* Return string literal table *)
-	lit_table
+	(out_buffer, lit_table, !num_stack_locs)
 
 let emit oc decl =
 	match decl with
 	| Function (func_name, func_body) ->
 		begin
+			let body_buf, lit_table, num_stack_locs = emit_func oc func_body in
+
 			output_string oc "section .text\n";
 
 			fprintf oc "global %s\n" func_name;
 			output_string oc "extern printf\n";
 			
 			fprintf oc "%s:\n" func_name;
-			output_string oc "push rbp\n";
-			output_string oc "mov rbp, rsp\n";
-			output_string oc "sub rsp, 1024\n"; (* FIXME: For now we just allocate a "big enough" stack frame *)
+			output_string oc "\tpush rbp\n";
+			output_string oc "\tmov rbp, rsp\n";
 
-			let lit_table = emit_func oc func_body in
+			(* Stack needs to be 16 byte aligned *)
+			let eff_num_stack_locs = ((num_stack_locs + 1) / 2) * 2 in
+			fprintf oc "\tsub rsp, %d\n" (eff_num_stack_locs * 8);
 
-			output_string oc "mov rax, 0\n";
-			output_string oc "mov rsp, rbp\n";
-			output_string oc "pop rbp\n";
-			output_string oc "ret\n";
+			output_string oc (Buffer.contents body_buf);
+
+			output_string oc "\tmov rax, 0\n";
+			output_string oc "\tmov rsp, rbp\n";
+			output_string oc "\tpop rbp\n";
+			output_string oc "\tret\n";
 
 			(* Output string literals *)
 			output_string oc "section .data\n";
