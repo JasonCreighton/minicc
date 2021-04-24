@@ -13,7 +13,7 @@ let id_of_string_lit lit_table s =
 		Hashtbl.add lit_table s new_id;
 		new_id
 
-let emit_func oc body =
+let emit_func body =
 	let out_buffer = Buffer.create 4096 in
 	let lit_table = Hashtbl.create 100 in
 	let var_table = Hashtbl.create 100 in
@@ -96,7 +96,7 @@ let emit oc decl =
 	match decl with
 	| Function (func_name, func_body) ->
 		begin
-			let body_buf, lit_table, num_stack_locs = emit_func oc func_body in
+			let body_buf, lit_table, num_stack_locs = emit_func func_body in
 
 			output_string oc "section .text\n";
 

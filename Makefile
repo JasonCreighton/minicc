@@ -1,6 +1,6 @@
-SOURCES = ast.ml amd64.ml parser.mli parser.ml lexer.ml main.ml
+SOURCES = ast.ml amd64.ml parser.mli parser.ml lexer.ml tests.ml main.ml
 
-.PHONY: all test
+.PHONY: all test test_ocaml test_regression
 
 all: minicc
 
@@ -34,5 +34,10 @@ regression_actual_out.txt: regression
 regression_expected_out.txt: regression_golden
 	./regression_golden > regression_expected_out.txt
 
-test: regression_expected_out.txt regression_actual_out.txt
+test_regression: regression_expected_out.txt regression_actual_out.txt
 	diff -u regression_expected_out.txt regression_actual_out.txt
+
+test_ocaml: minicc
+	./minicc -runtests
+
+test: test_ocaml test_regression
