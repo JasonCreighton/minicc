@@ -24,6 +24,7 @@ rule token = parse
   | '}'            { RBRACE }
   | ','            { COMMA }
   | ';'            { SEMICOLON }
+  | '='            { EQUAL }
   | eof            { raise Eof }
 
 and quoted_string pieces = parse

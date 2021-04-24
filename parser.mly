@@ -3,6 +3,7 @@
 %token <string> LITERAL_STRING
 %token TYPE_INT
 %token PLUS MINUS TIMES DIV
+%token EQUAL
 %token LPAREN RPAREN
 %token LBRACE RBRACE
 %token COMMA
@@ -10,9 +11,13 @@
 %token IF
 %token ELSE
 %token EOL
-%left PLUS MINUS        /* lowest precedence */
-%left TIMES DIV         /* medium precedence */
-%nonassoc UMINUS        /* highest precedence */
+
+
+/* Lower precedence is listed first */
+%right EQUAL
+%left PLUS MINUS
+%left TIMES DIV
+%nonassoc UMINUS
 
 /* Hack to resolve "dangling else" shift/reduce conflict */
 %nonassoc RPAREN
@@ -40,6 +45,7 @@ statement_list:
 statement
   : expr SEMICOLON { Ast.ExprStmt $1 }
   | compound_statement { $1 }
+  | TYPE_INT IDENTIFIER SEMICOLON { Ast.DeclVar $2 }  
   | IF LPAREN expr RPAREN statement { Ast.IfElseStmt ($3, $5, Ast.CompoundStmt []) }
   | IF LPAREN expr RPAREN statement ELSE statement { Ast.IfElseStmt ($3, $5, $7) }
 ;
@@ -47,6 +53,8 @@ statement
 expr:
     LITERAL_INT             { Ast.Lit $1 }
   | LITERAL_STRING          { Ast.LitString $1 }
+  | IDENTIFIER              { Ast.VarRef $1 }
+  | expr EQUAL expr         { Ast.Assign ($1, $3) }
   | LPAREN expr RPAREN      { $2 }
   | expr PLUS expr          { Ast.Add ($1, $3) }
   | expr MINUS expr         { Ast.Sub ($1, $3) }

@@ -1,9 +1,13 @@
 int main() {
-	printf("Hello, world!\n");	
-	printf("A number: %d\n", 42);
+	int x;
 
-	if(1) {
-		printf("1 is true\n");
+	x = 42;
+
+	printf("Hello, world!\n");
+	printf("A number: %d\n", x);
+
+	if(x) {
+		printf("x is true\n");
 	}
 
 	if(0) {
