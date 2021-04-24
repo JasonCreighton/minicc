@@ -1,6 +1,8 @@
 open Printf
 open Ast
 
+exception Compile_error of string
+
 let call_registers = ["rdi"; "rsi"; "rdx"; "rcx"; "r8"; "r9"]
 
 let id_of_string_lit lit_table s =
@@ -30,6 +32,7 @@ let emit_func oc body =
 	and find_var_loc v =
 		match Hashtbl.find_opt var_table v with
 		| Some loc -> loc
+		| None -> raise (Compile_error (sprintf "Undeclared variable '%s'" v))
 	and emit_stmt stmt =
 		match stmt with
 		| DeclVar v -> begin
@@ -55,6 +58,7 @@ let emit_func oc body =
 		| Assign (VarRef v, rhs) ->
 			emit_expr rhs;
 			fprintf oc "mov [rbp - %d], rax\n" (find_var_loc v)
+		| Assign (_, _) -> raise (Compile_error "Assignment to non-lvalue")
 		| VarRef v -> fprintf  oc "mov rax, [rbp - %d]\n" (find_var_loc v)
 		| Add (e1, e2) -> (put_in_rax_rbx e1 e2; output_string oc "add rax, rbx\n")
 		| Sub (e1, e2) -> (put_in_rax_rbx e1 e2; output_string oc "sub rax, rbx\n")
