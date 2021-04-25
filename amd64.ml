@@ -39,11 +39,11 @@ let emit_func body =
 		Buffer.add_string out_buffer str;
 		Buffer.add_char out_buffer '\n';
 	end
+	and asm_raw str = Buffer.add_string out_buffer str
 	and new_label () =
 		let l = !next_label_id in
 		next_label_id := !next_label_id + 1;
 		l
-	and asm_raw str = Buffer.add_string out_buffer str
 	and decl_var v =
 		num_stack_locs := !num_stack_locs + 1;
 		Hashtbl.add var_table v (!num_stack_locs * 8)
@@ -64,9 +64,25 @@ let emit_func body =
 			ksprintf asm "je .label_%d" else_label_id;
 			emit_stmt then_stmt;
 			ksprintf asm "jmp .label_%d" done_label_id;
-			ksprintf asm_raw ".label_%d:\n" else_label_id;
+			ksprintf asm_raw ".label_%d: ; else\n" else_label_id;
 			emit_stmt else_stmt;
-			ksprintf asm_raw ".label_%d:\n" done_label_id
+			ksprintf asm_raw ".label_%d: ; end if\n" done_label_id
+		end
+		| WhileStmt (cond, body) -> begin			
+			let test_label_id = new_label () in
+			let end_label_id = new_label () in
+
+			(* Loop test *)
+			ksprintf asm_raw ".label_%d: ; while test\n" test_label_id;
+			emit_expr cond;
+			asm "cmp rax, 0";
+			ksprintf asm "je .label_%d" end_label_id;
+
+			(* Loop body *)
+			emit_stmt body;
+
+			ksprintf asm "jmp .label_%d" test_label_id;
+			ksprintf asm_raw ".label_%d: ; end while\n" end_label_id;
 		end
 	and emit_expr expr =
 		match expr with

@@ -11,6 +11,7 @@ rule token = parse
   | "int"          { TYPE_INT }
   | "if"           { IF }
   | "else"         { ELSE }
+  | "while"        { WHILE }
   | id as lxm      { IDENTIFIER(lxm) }
   | digit+ as lxm { LITERAL_INT(int_of_string lxm) }  
   | '"'            { quoted_string [] lexbuf }

@@ -17,4 +17,14 @@ int main() {
 	} else {
 		printf("y is false\n");
 	}
+
+	x = 4;
+	while(x) {
+		y = 6;
+		while(y) {
+			printf("x=%d, y=%d\n", x, y);
+			y = y - 1;
+		}
+		x = x - 1;
+	}
 }

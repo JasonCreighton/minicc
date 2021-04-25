@@ -10,6 +10,7 @@
 %token SEMICOLON
 %token IF
 %token ELSE
+%token WHILE
 %token EOL
 
 
@@ -49,6 +50,7 @@ statement
   | TYPE_INT IDENTIFIER EQUAL expr SEMICOLON { Ast.DeclAssign ($2, $4) }  
   | IF LPAREN expr RPAREN statement { Ast.IfElseStmt ($3, $5, Ast.CompoundStmt []) }
   | IF LPAREN expr RPAREN statement ELSE statement { Ast.IfElseStmt ($3, $5, $7) }
+  | WHILE LPAREN expr RPAREN statement { Ast.WhileStmt ($3, $5) }
 ;
 
 expr:
