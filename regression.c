@@ -1,14 +1,12 @@
 int main() {
-	int x;
-	int y;
+	int x = 42;
+	int y = 0;
 	int z;
 
-	x = 42;
-	y = 0;
 	z = 7;
 
 	printf("Hello, world!\n");
-	printf("A number: %d\n", x);
+	printf("Numbers: %d, %d, %d\n", x, y, z);
 
 	if(x) {
 		printf("x is true\n");

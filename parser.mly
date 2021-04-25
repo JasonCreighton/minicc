@@ -45,7 +45,8 @@ statement_list:
 statement
   : expr SEMICOLON { Ast.ExprStmt $1 }
   | compound_statement { $1 }
-  | TYPE_INT IDENTIFIER SEMICOLON { Ast.DeclVar $2 }  
+  | TYPE_INT IDENTIFIER SEMICOLON { Ast.DeclVar $2 }
+  | TYPE_INT IDENTIFIER EQUAL expr SEMICOLON { Ast.DeclAssign ($2, $4) }  
   | IF LPAREN expr RPAREN statement { Ast.IfElseStmt ($3, $5, Ast.CompoundStmt []) }
   | IF LPAREN expr RPAREN statement ELSE statement { Ast.IfElseStmt ($3, $5, $7) }
 ;

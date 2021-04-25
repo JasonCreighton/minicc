@@ -40,12 +40,16 @@ let emit_func body =
 		Buffer.add_char out_buffer '\n';
 	end
 	and asm_raw str = Buffer.add_string out_buffer str
+	and decl_var v =
+		num_stack_locs := !num_stack_locs + 1;
+		Hashtbl.add var_table v (!num_stack_locs * 8)
+	and assign_var v expr =
+		emit_expr expr;
+		ksprintf asm "mov [rbp - %d], rax" (find_var_loc v)
 	and emit_stmt stmt =
 		match stmt with
-		| DeclVar v -> begin
-			num_stack_locs := !num_stack_locs + 1;
-			Hashtbl.add var_table v (!num_stack_locs * 8)
-		end
+		| DeclVar v -> decl_var v
+		| DeclAssign (v, expr) -> decl_var v; assign_var v expr
 		| ExprStmt expr -> emit_expr expr
 		| CompoundStmt stmts -> List.iter emit_stmt stmts
 		| IfElseStmt (cond, then_stmt, else_stmt) -> begin
@@ -62,9 +66,7 @@ let emit_func body =
 		match expr with
 		| Lit n -> ksprintf asm "mov rax, %d" n;
 		| LitString s -> ksprintf asm "mov rax, string_lit_%d" (id_of_string_lit lit_table s)
-		| Assign (VarRef v, rhs) ->
-			emit_expr rhs;
-			ksprintf asm "mov [rbp - %d], rax" (find_var_loc v)
+		| Assign (VarRef v, rhs) -> assign_var v rhs
 		| Assign (_, _) -> raise (Compile_error "Assignment to non-lvalue")
 		| VarRef v -> ksprintf asm "mov rax, [rbp - %d]" (find_var_loc v)
 		| Add (e1, e2) -> (put_in_rax_rbx e1 e2; asm "add rax, rbx")

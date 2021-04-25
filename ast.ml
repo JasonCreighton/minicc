@@ -5,6 +5,7 @@ and stmt =
 	| ExprStmt of expr
 	| IfElseStmt of expr * stmt * stmt
 	| DeclVar of string
+	| DeclAssign of string * expr
 and expr =
 	| Lit of int
 	| LitString of string
