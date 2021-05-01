@@ -1,11 +1,22 @@
 type decl =
 	| Function of string * stmt
+and int_size =
+	| Char
+	| Short
+	| Int
+	| Long
+and ctype =
+	| Void
+	| Signed of int_size
+	| Unsigned of int_size
+	| Float
+	| Double
 and stmt =
     | CompoundStmt of stmt list
 	| ExprStmt of expr
 	| IfElseStmt of expr * stmt * stmt
-	| DeclVar of string
-	| DeclAssign of string * expr
+	| DeclVar of ctype * string
+	| DeclAssign of ctype * string * expr
 	| WhileStmt of expr * stmt
 and expr =
 	| Lit of int

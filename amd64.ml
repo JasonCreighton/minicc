@@ -13,11 +13,25 @@ let id_of_string_lit lit_table s =
 		Hashtbl.add lit_table s new_id;
 		new_id
 
+let sizeof ctype =
+	let sizeof_int int_size =
+		match int_size with
+		| Char -> 1
+		| Short -> 2
+		| Int -> 4
+		| Long -> 8
+	in
+	match ctype with
+	| Void -> raise (Compile_error "Can't use void in sized context")
+	| Signed x | Unsigned x -> sizeof_int x
+	| Float -> 4
+	| Double -> 8
+
 let emit_func body =
 	let out_buffer = Buffer.create 4096 in
 	let lit_table = Hashtbl.create 100 in
 	let var_table = Hashtbl.create 100 in
-	let num_stack_locs = ref 0 in
+	let stack_bytes_allocated = ref 8 in
 	let next_label_id = ref 0 in
 	let rec put_in_rax_rbx e1 e2 =
 		begin
@@ -44,16 +58,28 @@ let emit_func body =
 		let l = !next_label_id in
 		next_label_id := !next_label_id + 1;
 		l
-	and decl_var v =
-		num_stack_locs := !num_stack_locs + 1;
-		Hashtbl.add var_table v (!num_stack_locs * 8)
+	and decl_var ctype v =
+		let size = sizeof ctype in
+
+		(* FIXME: Should not consume 8 bytes for all variables *)
+		stack_bytes_allocated := !stack_bytes_allocated + 8;
+		let loc = !stack_bytes_allocated in
+		Hashtbl.add var_table v (loc, ctype)
 	and assign_var v expr =
 		emit_expr expr;
-		ksprintf asm "mov [rbp - %d], rax" (find_var_loc v)
+		let loc, ctype = find_var_loc v in
+		let reg_name = match sizeof ctype with
+			| 1 -> "al"
+			| 2 -> "ax"
+			| 4 -> "eax"
+			| 8 -> "rax"
+			| _ -> failwith "Should not happen"
+		in
+		ksprintf asm "mov [rbp - %d], %s" loc reg_name
 	and emit_stmt stmt =
 		match stmt with
-		| DeclVar v -> decl_var v
-		| DeclAssign (v, expr) -> decl_var v; assign_var v expr
+		| DeclVar (ctype, v) -> decl_var ctype v
+		| DeclAssign (ctype, v, expr) -> decl_var ctype v; assign_var v expr
 		| ExprStmt expr -> emit_expr expr
 		| CompoundStmt stmts -> List.iter emit_stmt stmts
 		| IfElseStmt (cond, then_stmt, else_stmt) -> begin
@@ -90,7 +116,20 @@ let emit_func body =
 		| LitString s -> ksprintf asm "mov rax, string_lit_%d" (id_of_string_lit lit_table s)
 		| Assign (VarRef v, rhs) -> assign_var v rhs
 		| Assign (_, _) -> raise (Compile_error "Assignment to non-lvalue")
-		| VarRef v -> ksprintf asm "mov rax, [rbp - %d]" (find_var_loc v)
+		| VarRef v -> begin
+			let loc, ctype = find_var_loc v in
+			let inst, width, dest_reg = match ctype with
+				| Signed Char -> ("movsx", "byte", "rax")
+				| Signed Short -> ("movsx", "word", "rax")
+				| Signed Int -> ("movsx", "dword", "rax")
+				| Signed Long -> ("mov", "qword", "rax")
+				| Unsigned Char -> ("movzx", "byte", "rax")
+				| Unsigned Short -> ("movzx", "word", "rax")
+				| Unsigned Int -> ("mov", "dword", "eax")
+				| Unsigned Long -> ("mov", "qword", "rax")
+			in
+			ksprintf asm "%s %s, %s [rbp - %d]" inst dest_reg width loc
+		end
 		| Add (e1, e2) -> (put_in_rax_rbx e1 e2; asm "add rax, rbx")
 		| Sub (e1, e2) -> (put_in_rax_rbx e1 e2; asm "sub rax, rbx")
 		| Mul (e1, e2) -> (put_in_rax_rbx e1 e2; asm "imul rax, rbx")
@@ -114,13 +153,13 @@ let emit_func body =
 			end
 	in
 	emit_stmt body; 
-	(out_buffer, lit_table, !num_stack_locs)
+	(out_buffer, lit_table, !stack_bytes_allocated)
 
 let emit oc decl =
 	match decl with
 	| Function (func_name, func_body) ->
 		begin
-			let body_buf, lit_table, num_stack_locs = emit_func func_body in
+			let body_buf, lit_table, stack_bytes_allocated = emit_func func_body in
 
 			output_string oc "section .text\n";
 
@@ -132,8 +171,8 @@ let emit oc decl =
 			output_string oc "\tmov rbp, rsp\n";
 
 			(* Stack needs to be 16 byte aligned *)
-			let eff_num_stack_locs = ((num_stack_locs + 1) / 2) * 2 in
-			fprintf oc "\tsub rsp, %d\n" (eff_num_stack_locs * 8);
+			let eff_stack_bytes = (((stack_bytes_allocated - 1) / 16) + 1) * 16 in
+			fprintf oc "\tsub rsp, %d\n" eff_stack_bytes;
 
 			output_string oc (Buffer.contents body_buf);
 

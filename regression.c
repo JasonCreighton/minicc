@@ -1,12 +1,16 @@
 int main() {
-	int x = 42;
-	int y = 0;
-	int z;
+	unsigned char w;
+	short x = 42;
+	int y = 15;
+	long z = 100;
 
-	z = 7;
+	w = 250;
 
 	printf("Hello, world!\n");
-	printf("Numbers: %d, %d, %d\n", x, y, z);
+	printf("Numbers: %d, %d, %d, %ld\n", w, x, y, z);
+
+	w = w + 30;
+	printf("Wraparound: %d\n", w);
 
 	if(x) {
 		printf("x is true\n");

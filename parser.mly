@@ -1,7 +1,11 @@
 %token <int> LITERAL_INT
 %token <string> IDENTIFIER
 %token <string> LITERAL_STRING
-%token TYPE_INT
+%token VOID
+%token CHAR SHORT INT LONG
+%token FLOAT DOUBLE
+%token SIGNED UNSIGNED
+%token STRUCT
 %token PLUS MINUS TIMES DIV
 %token EQUAL
 %token LPAREN RPAREN
@@ -30,7 +34,23 @@
 ;
 /* Total hack for now to get a minimal function parsing */
 decl:
-	TYPE_INT IDENTIFIER LPAREN RPAREN compound_statement { Ast.Function ($2, $5) }
+	ctype IDENTIFIER LPAREN RPAREN compound_statement { Ast.Function ($2, $5) }
+;
+
+ctype
+  : VOID { Ast.Void }
+  | int_size { Ast.Signed $1 }
+  | SIGNED int_size { Ast.Signed $2 }
+  | UNSIGNED int_size { Ast.Unsigned $2 }
+  | FLOAT { Ast.Float }
+  | DOUBLE { Ast.Double }
+;
+
+int_size
+  : CHAR { Ast.Char }
+  | SHORT { Ast.Short }
+  | INT { Ast.Int }
+  | LONG { Ast.Long }
 ;
 
 compound_statement:
@@ -46,8 +66,8 @@ statement_list:
 statement
   : expr SEMICOLON { Ast.ExprStmt $1 }
   | compound_statement { $1 }
-  | TYPE_INT IDENTIFIER SEMICOLON { Ast.DeclVar $2 }
-  | TYPE_INT IDENTIFIER EQUAL expr SEMICOLON { Ast.DeclAssign ($2, $4) }  
+  | ctype IDENTIFIER SEMICOLON { Ast.DeclVar ($1, $2) }
+  | ctype IDENTIFIER EQUAL expr SEMICOLON { Ast.DeclAssign ($1, $2, $4) }  
   | IF LPAREN expr RPAREN statement { Ast.IfElseStmt ($3, $5, Ast.CompoundStmt []) }
   | IF LPAREN expr RPAREN statement ELSE statement { Ast.IfElseStmt ($3, $5, $7) }
   | WHILE LPAREN expr RPAREN statement { Ast.WhileStmt ($3, $5) }

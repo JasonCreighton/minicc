@@ -8,7 +8,13 @@ let hex = ['0'-'9' 'a'-'f' 'A'-'F']
 let id    = alpha (alpha|digit)*
 rule token = parse
     [' ' '\t' '\n']     { token lexbuf }     (* skip blanks *)
-  | "int"          { TYPE_INT }
+  | "char"         { CHAR }
+  | "short"        { SHORT }
+  | "int"          { INT }
+  | "long"         { LONG }
+  | "signed"       { SIGNED }
+  | "unsigned"     { UNSIGNED }
+  | "struct"       { STRUCT }
   | "if"           { IF }
   | "else"         { ELSE }
   | "while"        { WHILE }
