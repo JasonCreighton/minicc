@@ -33,6 +33,12 @@ let emit_func body =
 	let var_table = Hashtbl.create 100 in
 	let stack_bytes_allocated = ref 8 in
 	let next_label_id = ref 0 in
+	let asmf fmt =
+		Buffer.add_char out_buffer '\t';
+		kbprintf (fun b -> Buffer.add_char b '\n') out_buffer fmt
+	in
+	let asm_rawf fmt = bprintf out_buffer fmt in
+	let asm str = asmf "%s" str in
 	let rec put_in_rax_rbx e1 e2 =
 		begin
 			(*
@@ -75,7 +81,7 @@ let emit_func body =
 			| 8 -> "rax"
 			| _ -> failwith "Should not happen"
 		in
-		ksprintf asm "mov [rbp - %d], %s" loc reg_name
+		asmf "mov [rbp - %d], %s" loc reg_name
 	and emit_stmt stmt =
 		match stmt with
 		| DeclVar (ctype, v) -> decl_var ctype v
@@ -87,33 +93,33 @@ let emit_func body =
 			let done_label_id = new_label () in
 			emit_expr cond;
 			asm "cmp rax, 0";
-			ksprintf asm "je .label_%d" else_label_id;
+			asmf "je .label_%d" else_label_id;
 			emit_stmt then_stmt;
-			ksprintf asm "jmp .label_%d" done_label_id;
-			ksprintf asm_raw ".label_%d: ; else\n" else_label_id;
+			asmf "jmp .label_%d" done_label_id;
+			asm_rawf ".label_%d: ; else\n" else_label_id;
 			emit_stmt else_stmt;
-			ksprintf asm_raw ".label_%d: ; end if\n" done_label_id
+			asm_rawf ".label_%d: ; end if\n" done_label_id
 		end
 		| WhileStmt (cond, body) -> begin			
 			let test_label_id = new_label () in
 			let end_label_id = new_label () in
 
 			(* Loop test *)
-			ksprintf asm_raw ".label_%d: ; while test\n" test_label_id;
+			asm_rawf ".label_%d: ; while test\n" test_label_id;
 			emit_expr cond;
 			asm "cmp rax, 0";
-			ksprintf asm "je .label_%d" end_label_id;
+			asmf "je .label_%d" end_label_id;
 
 			(* Loop body *)
 			emit_stmt body;
 
-			ksprintf asm "jmp .label_%d" test_label_id;
-			ksprintf asm_raw ".label_%d: ; end while\n" end_label_id;
+			asmf "jmp .label_%d" test_label_id;
+			asm_rawf ".label_%d: ; end while\n" end_label_id;
 		end
 	and emit_expr expr =
 		match expr with
-		| Lit n -> ksprintf asm "mov rax, %d" n;
-		| LitString s -> ksprintf asm "mov rax, string_lit_%d" (id_of_string_lit lit_table s)
+		| Lit n -> asmf "mov rax, %d" n;
+		| LitString s -> asmf "mov rax, string_lit_%d" (id_of_string_lit lit_table s)
 		| Assign (VarRef v, rhs) -> assign_var v rhs
 		| Assign (_, _) -> raise (Compile_error "Assignment to non-lvalue")
 		| VarRef v -> begin
@@ -128,7 +134,7 @@ let emit_func body =
 				| Unsigned Int -> ("mov", "dword", "eax")
 				| Unsigned Long -> ("mov", "qword", "rax")
 			in
-			ksprintf asm "%s %s, %s [rbp - %d]" inst dest_reg width loc
+			asmf "%s %s, %s [rbp - %d]" inst dest_reg width loc
 		end
 		| Add (e1, e2) -> (put_in_rax_rbx e1 e2; asm "add rax, rbx")
 		| Sub (e1, e2) -> (put_in_rax_rbx e1 e2; asm "sub rax, rbx")
@@ -146,10 +152,10 @@ let emit_func body =
 				List.iter (fun a -> emit_expr a; asm "push rax") (List.rev args);
 
 				(* Pop stack values into calling convention registers *)
-				List.iteri (fun i reg -> if i < (List.length args) then ksprintf asm "pop %s" reg else ()) call_registers;
+				List.iteri (fun i reg -> if i < (List.length args) then asmf "pop %s" reg else ()) call_registers;
 
 				(* FIXME: We will have to distinguish between library calls and user-defined calls because of the PLT *)
-				ksprintf asm "call %s WRT ..plt" func_name;
+				asmf "call %s WRT ..plt" func_name;
 			end
 	in
 	emit_stmt body; 
