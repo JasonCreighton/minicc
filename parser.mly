@@ -34,7 +34,7 @@
 ;
 /* Total hack for now to get a minimal function parsing */
 decl:
-	ctype IDENTIFIER LPAREN RPAREN compound_statement { Ast.Function ($2, $5) }
+  ctype IDENTIFIER LPAREN RPAREN compound_statement { Ast.Function ($2, $5) }
 ;
 
 ctype
