@@ -32,7 +32,7 @@ let emit_func body =
     let out_buffer = Buffer.create 4096 in
     let lit_table = Hashtbl.create 100 in
     let var_table = Hashtbl.create 100 in
-    let stack_bytes_allocated = ref 8 in
+    let stack_bytes_allocated = ref 0 in
     let next_label_id = ref 0 in
 
     (* Helper functions *)
@@ -53,11 +53,22 @@ let emit_func body =
         l
     in
     let decl_var ctype v =
+        (*
+        TODO: This just allocates space as we go, it would be more efficient to
+        allocate the whole stack frame at once so we can minimize padding holes
+        *)
+        
         let size = sizeof ctype in
 
-        (* FIXME: Should not consume 8 bytes for all variables *)
-        stack_bytes_allocated := !stack_bytes_allocated + 8;
+        (* Align to size *)
+        stack_bytes_allocated := (!stack_bytes_allocated + (size - 1)) land (lnot (size - 1));
+
+        (* Consume space *)
+        stack_bytes_allocated := !stack_bytes_allocated + size;
+
         let loc = !stack_bytes_allocated in
+
+        (* Record in variable table *)
         Hashtbl.add var_table v (loc, ctype)
     in
 
