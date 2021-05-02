@@ -137,15 +137,15 @@ let emit_func body =
         | Assign (_, _) -> raise (Compile_error "Assignment to non-lvalue")
         | VarRef v -> begin
             let loc, ctype = find_var_loc v in
-            let inst, width, dest_reg = match ctype with
-                | Signed Char -> ("movsx", "byte", "rax")
-                | Signed Short -> ("movsx", "word", "rax")
-                | Signed Int -> ("movsx", "dword", "rax")
-                | Signed Long -> ("mov", "qword", "rax")
-                | Unsigned Char -> ("movzx", "byte", "rax")
-                | Unsigned Short -> ("movzx", "word", "rax")
-                | Unsigned Int -> ("mov", "dword", "eax")
-                | Unsigned Long -> ("mov", "qword", "rax")
+            let inst, dest_reg, width = match ctype with
+                | Signed Char -> ("movsx", "rax", "byte")
+                | Signed Short -> ("movsx", "rax", "word")
+                | Signed Int -> ("movsx", "rax", "dword")
+                | Signed Long -> ("mov", "rax", "qword")
+                | Unsigned Char -> ("movzx", "rax", "byte")
+                | Unsigned Short -> ("movzx", "rax", "word")
+                | Unsigned Int -> ("mov", "eax", "dword")
+                | Unsigned Long -> ("mov", "rax", "qword")
             in
             asmf "%s %s, %s [rbp - %d]" inst dest_reg width loc
         end
