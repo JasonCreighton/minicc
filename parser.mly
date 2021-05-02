@@ -79,10 +79,10 @@ expr:
   | IDENTIFIER              { Ast.VarRef $1 }
   | expr EQUAL expr         { Ast.Assign ($1, $3) }
   | LPAREN expr RPAREN      { $2 }
-  | expr PLUS expr          { Ast.Add ($1, $3) }
-  | expr MINUS expr         { Ast.Sub ($1, $3) }
-  | expr TIMES expr         { Ast.Mul ($1, $3) }
-  | expr DIV expr           { Ast.Div ($1, $3) }
+  | expr PLUS expr          { Ast.BinOp (Ast.Add, $1, $3) }
+  | expr MINUS expr         { Ast.BinOp (Ast.Sub, $1, $3) }
+  | expr TIMES expr         { Ast.BinOp (Ast.Mul, $1, $3) }
+  | expr DIV expr           { Ast.BinOp (Ast.Div, $1, $3) }
   | MINUS expr %prec UMINUS { Ast.Neg $2 }
   | IDENTIFIER LPAREN RPAREN { Ast.Call ($1, []) }
   | IDENTIFIER LPAREN argument_list RPAREN { Ast.Call ($1, List.rev $3) }

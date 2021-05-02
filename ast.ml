@@ -18,14 +18,16 @@ and stmt =
     | DeclVar of ctype * string
     | DeclAssign of ctype * string * expr
     | WhileStmt of expr * stmt
+and binop =
+    | Add
+    | Sub
+    | Mul
+    | Div
 and expr =
     | Lit of int
     | LitString of string
     | Assign of expr * expr
     | VarRef of string
-    | Add of expr * expr
-    | Sub of expr * expr
-    | Mul of expr * expr
-    | Div of expr * expr
+    | BinOp of binop * expr * expr
     | Neg of expr
     | Call of string * expr list

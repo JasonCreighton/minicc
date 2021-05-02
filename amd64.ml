@@ -149,10 +149,10 @@ let emit_func body =
             in
             asmf "%s %s, %s [rbp - %d]" inst dest_reg width loc
         end
-        | Add (e1, e2) -> (put_in_rax_rbx e1 e2; asm "add rax, rbx")
-        | Sub (e1, e2) -> (put_in_rax_rbx e1 e2; asm "sub rax, rbx")
-        | Mul (e1, e2) -> (put_in_rax_rbx e1 e2; asm "imul rax, rbx")
-        | Div (e1, e2) ->
+        | BinOp (Add, e1, e2) -> (put_in_rax_rbx e1 e2; asm "add rax, rbx")
+        | BinOp (Sub, e1, e2) -> (put_in_rax_rbx e1 e2; asm "sub rax, rbx")
+        | BinOp (Mul, e1, e2) -> (put_in_rax_rbx e1 e2; asm "imul rax, rbx")
+        | BinOp (Div, e1, e2) ->
             begin
                 put_in_rax_rbx e1 e2;
                 asm "cqo";
