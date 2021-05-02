@@ -28,17 +28,40 @@ let sizeof ctype =
     | Double -> 8
 
 let emit_func body =
+    (* Variables *)
     let out_buffer = Buffer.create 4096 in
     let lit_table = Hashtbl.create 100 in
     let var_table = Hashtbl.create 100 in
     let stack_bytes_allocated = ref 8 in
     let next_label_id = ref 0 in
+
+    (* Helper functions *)
     let asmf fmt =
         Buffer.add_char out_buffer '\t';
         kbprintf (fun b -> Buffer.add_char b '\n') out_buffer fmt
     in
     let asm_rawf fmt = bprintf out_buffer fmt in
     let asm str = asmf "%s" str in
+    let find_var_loc v =
+        match Hashtbl.find_opt var_table v with
+        | Some loc -> loc
+        | None -> raise (Compile_error (sprintf "Undeclared variable '%s'" v))
+    in
+    let new_label () =
+        let l = !next_label_id in
+        next_label_id := !next_label_id + 1;
+        l
+    in
+    let decl_var ctype v =
+        let size = sizeof ctype in
+
+        (* FIXME: Should not consume 8 bytes for all variables *)
+        stack_bytes_allocated := !stack_bytes_allocated + 8;
+        let loc = !stack_bytes_allocated in
+        Hashtbl.add var_table v (loc, ctype)
+    in
+
+    (* Recursive walk functions *)
     let rec put_in_rax_rbx e1 e2 =
         begin
             (*
@@ -50,27 +73,6 @@ let emit_func body =
             emit_expr e1;
             asm "pop rbx"
         end
-    and find_var_loc v =
-        match Hashtbl.find_opt var_table v with
-        | Some loc -> loc
-        | None -> raise (Compile_error (sprintf "Undeclared variable '%s'" v))
-    and asm str = begin
-        Buffer.add_char out_buffer '\t';
-        Buffer.add_string out_buffer str;
-        Buffer.add_char out_buffer '\n';
-    end
-    and asm_raw str = Buffer.add_string out_buffer str
-    and new_label () =
-        let l = !next_label_id in
-        next_label_id := !next_label_id + 1;
-        l
-    and decl_var ctype v =
-        let size = sizeof ctype in
-
-        (* FIXME: Should not consume 8 bytes for all variables *)
-        stack_bytes_allocated := !stack_bytes_allocated + 8;
-        let loc = !stack_bytes_allocated in
-        Hashtbl.add var_table v (loc, ctype)
     and assign_var v expr =
         emit_expr expr;
         let loc, ctype = find_var_loc v in
