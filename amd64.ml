@@ -73,7 +73,7 @@ let emit_func body =
     in
 
     (* Recursive walk functions *)
-    let rec put_in_rax_rbx e1 e2 =
+    let rec put_in_rax_rcx e1 e2 =
         begin
             (*
             Note: Evaluate RHS first, so we can end up with the LHS in rax.
@@ -82,10 +82,9 @@ let emit_func body =
             emit_expr e2;
             asm "push rax";
             emit_expr e1;
-            asm "pop rbx"
+            asm "pop rcx"
         end
-    and assign_var v expr =
-        emit_expr expr;
+    and store_accumulator_to_var v =
         let loc, ctype = find_var_loc v in
         let reg_name = match sizeof ctype with
             | 1 -> "al"
@@ -95,6 +94,36 @@ let emit_func body =
             | _ -> failwith "Should not happen"
         in
         asmf "mov [rbp - %d], %s" loc reg_name
+    and load_var_to_accumulator v =
+        let loc, ctype = find_var_loc v in
+        let inst, dest_reg, width = match ctype with
+            | Signed Char -> ("movsx", "rax", "byte")
+            | Signed Short -> ("movsx", "rax", "word")
+            | Signed Int -> ("movsx", "rax", "dword")
+            | Signed Long -> ("mov", "rax", "qword")
+            | Unsigned Char -> ("movzx", "rax", "byte")
+            | Unsigned Short -> ("movzx", "rax", "word")
+            | Unsigned Int -> ("mov", "eax", "dword")
+            | Unsigned Long -> ("mov", "rax", "qword")
+            | Void | Float | Double -> failwith "TODO: Implement more types"
+        in
+        asmf "%s %s, %s [rbp - %d]" inst dest_reg width loc
+    and assign_var v expr =
+        emit_expr expr;
+        store_accumulator_to_var v
+    and inc_or_dec yield_old_value inst_name expr =
+        match expr with
+        | VarRef v -> begin
+            load_var_to_accumulator v;
+
+            if yield_old_value then asm "mov rcx, rax";
+
+            asmf "%s rax" inst_name; (* Increment or decrement *)
+            store_accumulator_to_var v;
+
+            if yield_old_value then asm "mov rax, rcx";
+        end
+        | _ -> raise (Compile_error "Pre-Increment/Decrement of non-lvalue")
     and emit_stmt stmt =
         match stmt with
         | DeclVar (ctype, v) -> decl_var ctype v
@@ -135,30 +164,77 @@ let emit_func body =
         | LitString s -> asmf "mov rax, string_lit_%d" (id_of_string_lit lit_table s)
         | Assign (VarRef v, rhs) -> assign_var v rhs
         | Assign (_, _) -> raise (Compile_error "Assignment to non-lvalue")
-        | VarRef v -> begin
-            let loc, ctype = find_var_loc v in
-            let inst, dest_reg, width = match ctype with
-                | Signed Char -> ("movsx", "rax", "byte")
-                | Signed Short -> ("movsx", "rax", "word")
-                | Signed Int -> ("movsx", "rax", "dword")
-                | Signed Long -> ("mov", "rax", "qword")
-                | Unsigned Char -> ("movzx", "rax", "byte")
-                | Unsigned Short -> ("movzx", "rax", "word")
-                | Unsigned Int -> ("mov", "eax", "dword")
-                | Unsigned Long -> ("mov", "rax", "qword")
+        | VarRef v -> load_var_to_accumulator v
+        | BinOp (op, e1, e2) -> begin
+            let materialize_comparison condition_code =
+                asm "cmp rax, rcx";
+                asm "mov rax, 0";
+                asm "mov rcx, 1";
+                asmf "cmov%s rax, rcx" condition_code
             in
-            asmf "%s %s, %s [rbp - %d]" inst dest_reg width loc
+            put_in_rax_rcx e1 e2;
+
+            (* FIXME: Handle unsigned cases properly *)
+            match op with
+            | Add -> asm "add rax, rcx"
+            | Sub -> asm "sub rax, rcx"
+            | Mul -> asm "imul rax, rcx"
+            | Div -> asm "cqo"; asm "idiv rcx"
+            | Rem -> asm "cqo"; asm "idiv rcx"; asm "mov rax, rdx"
+            | BitAnd -> asm "and rax, rcx"
+            | BitOr -> asm "or rax, rcx"
+            | BitXor -> asm "xor rax, rcx"
+            | BitShiftLeft -> asm "sal rax, cl"
+            | BitShiftRight -> asm "sar rax, cl"
+            | CompEQ -> materialize_comparison "e"
+            | CompNEQ -> materialize_comparison "ne"
+            | CompLT -> materialize_comparison "l"
+            | CompGT -> materialize_comparison "g"
+            | CompLTE -> materialize_comparison "le"
+            | CompGTE -> materialize_comparison "ge"
+
         end
-        | BinOp (Add, e1, e2) -> (put_in_rax_rbx e1 e2; asm "add rax, rbx")
-        | BinOp (Sub, e1, e2) -> (put_in_rax_rbx e1 e2; asm "sub rax, rbx")
-        | BinOp (Mul, e1, e2) -> (put_in_rax_rbx e1 e2; asm "imul rax, rbx")
-        | BinOp (Div, e1, e2) ->
-            begin
-                put_in_rax_rbx e1 e2;
-                asm "cqo";
-                asm "idiv rbx";
-            end
-        | Neg e1 -> (emit_expr e1; asm "neg rax")
+        | UnaryOp (op, e) -> begin
+            match op with
+            | PreInc -> inc_or_dec false "inc" e
+            | PreDec -> inc_or_dec false "dec" e
+            | PostInc -> inc_or_dec true "inc" e
+            | PostDec -> inc_or_dec true "dec" e
+            | BitNot | LogicalNot -> emit_expr e; asm "not rax"
+            | Neg -> emit_expr e; asm "neg rax"
+        end
+        | Conditional (cond, true_expr, false_expr) -> begin
+            (* FIXME: Basically identical to IfElseStmt, except with expr instead of stmt *)
+            let else_label_id = new_label () in
+            let done_label_id = new_label () in
+            emit_expr cond;
+            asm "cmp rax, 0";
+            asmf "je .label_%d" else_label_id;
+            emit_expr true_expr;
+            asmf "jmp .label_%d" done_label_id;
+            asm_rawf ".label_%d: ; ternary false branch\n" else_label_id;
+            emit_expr false_expr;
+            asm_rawf ".label_%d: ; end ternary\n" done_label_id
+        end
+        | Sequence (e1, e2) -> emit_expr e1; emit_expr e2
+        | LogicalAnd (e1, e2) -> begin
+            (* FIXME: Very similar to LogicalOr *)
+            let short_circuit_label_id = new_label () in
+            emit_expr e1;
+            asm "cmp rax, 0";
+            asmf "je .label_%d" short_circuit_label_id;
+            emit_expr e2;
+            asm_rawf ".label_%d: ; short circuit &&\n" short_circuit_label_id
+        end
+        | LogicalOr (e1, e2) -> begin
+            (* FIXME: Very similar to LogicalAnd *)
+            let short_circuit_label_id = new_label () in
+            emit_expr e1;
+            asm "cmp rax, 0";
+            asmf "jne .label_%d" short_circuit_label_id;
+            emit_expr e2;
+            asm_rawf ".label_%d: ; short circuit ||\n" short_circuit_label_id
+        end
         | Call(func_name, args) ->
             begin
                 (* Evaluate arguments onto stack *)

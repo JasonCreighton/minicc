@@ -83,7 +83,7 @@ expr:
   | expr MINUS expr         { Ast.BinOp (Ast.Sub, $1, $3) }
   | expr TIMES expr         { Ast.BinOp (Ast.Mul, $1, $3) }
   | expr DIV expr           { Ast.BinOp (Ast.Div, $1, $3) }
-  | MINUS expr %prec UMINUS { Ast.Neg $2 }
+  | MINUS expr %prec UMINUS { Ast.UnaryOp (Ast.Neg, $2) }
   | IDENTIFIER LPAREN RPAREN { Ast.Call ($1, []) }
   | IDENTIFIER LPAREN argument_list RPAREN { Ast.Call ($1, List.rev $3) }
 ;
