@@ -5,10 +5,10 @@ SOURCES = ast.ml amd64.ml parser.mli parser.ml lexer.ml tests.ml main.ml
 all: minicc
 
 clean:
-	rm -f minicc parser.ml parser.mli lexer.ml regression.asm regression regression_golden regression_actual_out.txt regression_expected_out.txt *.cmi *.cmx *.o
+	rm -f minicc parser.ml parser.mli parser.output lexer.ml regression.asm regression regression_golden regression_actual_out.txt regression_expected_out.txt *.cmi *.cmx *.o
 
-parser.ml parser.mli: parser.mly
-	ocamlyacc parser.mly
+parser.ml parser.mli parser.output: parser.mly
+	ocamlyacc -v --strict parser.mly
 
 lexer.ml: lexer.mll
 	ocamllex lexer.mll

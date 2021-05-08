@@ -18,6 +18,8 @@ rule token = parse
   | "if"           { IF }
   | "else"         { ELSE }
   | "while"        { WHILE }
+  | "++"           { PLUSPLUS }
+  | "--"           { MINUSMINUS }
   | id as lxm      { IDENTIFIER(lxm) }
   | digit+ as lxm { LITERAL_INT(int_of_string lxm) }  
   | '"'            { quoted_string [] lexbuf }

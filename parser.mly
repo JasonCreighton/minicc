@@ -7,6 +7,7 @@
 %token SIGNED UNSIGNED
 %token STRUCT
 %token PLUS MINUS TIMES DIV
+%token PLUSPLUS MINUSMINUS
 %token EQUAL
 %token LPAREN RPAREN
 %token LBRACE RBRACE
@@ -16,13 +17,6 @@
 %token ELSE
 %token WHILE
 %token EOL
-
-
-/* Lower precedence is listed first */
-%right EQUAL
-%left PLUS MINUS
-%left TIMES DIV
-%nonassoc UMINUS
 
 /* Hack to resolve "dangling else" shift/reduce conflict */
 %nonassoc RPAREN
@@ -73,22 +67,64 @@ statement
   | WHILE LPAREN expr RPAREN statement { Ast.WhileStmt ($3, $5) }
 ;
 
-expr:
-    LITERAL_INT             { Ast.Lit $1 }
+/* Precedence taken from here: https://en.cppreference.com/w/c/language/operator_precedence */
+p0_expr
+  : LITERAL_INT             { Ast.Lit $1 }
   | LITERAL_STRING          { Ast.LitString $1 }
   | IDENTIFIER              { Ast.VarRef $1 }
-  | expr EQUAL expr         { Ast.Assign ($1, $3) }
   | LPAREN expr RPAREN      { $2 }
-  | expr PLUS expr          { Ast.BinOp (Ast.Add, $1, $3) }
-  | expr MINUS expr         { Ast.BinOp (Ast.Sub, $1, $3) }
-  | expr TIMES expr         { Ast.BinOp (Ast.Mul, $1, $3) }
-  | expr DIV expr           { Ast.BinOp (Ast.Div, $1, $3) }
-  | MINUS expr %prec UMINUS { Ast.UnaryOp (Ast.Neg, $2) }
-  | IDENTIFIER LPAREN RPAREN { Ast.Call ($1, []) }
+;
+
+p1_expr
+  : p0_expr { $1 }
+  | p1_expr PLUSPLUS { Ast.UnaryOp (Ast.PostInc, $1) }
+  | p1_expr MINUSMINUS { Ast.UnaryOp (Ast.PostDec, $1) }
   | IDENTIFIER LPAREN argument_list RPAREN { Ast.Call ($1, List.rev $3) }
 ;
 
+p2_expr
+  : p1_expr { $1 }
+  | PLUSPLUS p2_expr { Ast.UnaryOp (Ast.PreInc, $2) }
+  | MINUSMINUS p2_expr { Ast.UnaryOp (Ast.PreDec, $2) }
+  | MINUS p2_expr { Ast.UnaryOp (Ast.Neg, $2) }
+;
+
+p3_expr
+  : p2_expr { $1 }
+  | p3_expr TIMES p2_expr { Ast.BinOp (Ast.Mul, $1, $3) }
+  | p3_expr DIV p2_expr { Ast.BinOp (Ast.Mul, $1, $3) }
+;
+
+p4_expr
+  : p3_expr { $1 }
+  | p4_expr PLUS p3_expr { Ast.BinOp (Ast.Add, $1, $3) }
+  | p4_expr MINUS p3_expr { Ast.BinOp (Ast.Sub, $1, $3) }
+;
+
+p5_expr: p4_expr { $1 };
+p6_expr: p5_expr { $1 };
+p7_expr: p6_expr { $1 };
+p8_expr: p7_expr { $1 };
+p9_expr: p8_expr { $1 };
+p10_expr: p9_expr { $1 };
+p11_expr: p10_expr { $1 };
+p12_expr: p11_expr { $1 };
+p13_expr: p12_expr { $1 };
+
+p14_expr
+  : p13_expr { $1 }
+  | p13_expr EQUAL p14_expr { Ast.Assign ($1, $3) }
+;
+
+p15_expr
+  : p14_expr { $1 }
+  | p15_expr COMMA p14_expr { Ast.Sequence ($1, $3) }
+;
+
+expr: p15_expr { $1 };
+
+/* Note that we must use p14_expr in order to exclude the comma operator from the argument list */
 argument_list:
-    expr { [$1] }
-  | argument_list COMMA expr { $3 :: $1 }
+    p14_expr { [$1] }
+  | argument_list COMMA p14_expr { $3 :: $1 }
 ;

@@ -8,6 +8,9 @@ int main() {
 
     printf("Hello, world!\n");
     printf("Numbers: %d, %d, %d, %ld\n", w, x, y, z);
+    printf("y++: %d\n", y++);
+    printf("++y: %d\n", ++y);
+    
 
     w = w + 30;
     printf("Wraparound: %d\n", w);
