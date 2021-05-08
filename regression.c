@@ -8,9 +8,16 @@ int main() {
 
     printf("Hello, world!\n");
     printf("Numbers: %d, %d, %d, %ld\n", w, x, y, z);
+    printf("x == 42 = %d\n", x == 42);
+    printf("y != 15 = %d\n", y != 15);
     printf("y++: %d\n", y++);
     printf("++y: %d\n", ++y);
-    
+    printf("x << 3 = %d\n", x << 3);
+    printf("y >> 1 = %d\n", y >> 1);
+    printf("x > y = %d\n", x > y);
+    printf("x < y = %d\n", x < y);
+
+    printf("testing\n"), printf("comma\n"), printf("operator\n");    
 
     w = w + 30;
     printf("Wraparound: %d\n", w);

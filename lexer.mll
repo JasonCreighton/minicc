@@ -20,8 +20,21 @@ rule token = parse
   | "while"        { WHILE }
   | "++"           { PLUSPLUS }
   | "--"           { MINUSMINUS }
-  | id as lxm      { IDENTIFIER(lxm) }
-  | digit+ as lxm { LITERAL_INT(int_of_string lxm) }  
+  | "<<"           { LSHIFT }
+  | ">>"           { RSHIFT }
+  | '<'            { LESSTHAN }
+  | "<="           { LESSTHANEQUAL }
+  | '>'            { GREATERTHAN }
+  | ">="           { GREATERTHANEQUAL }
+  | "=="           { EQUALEQUAL }
+  | "!="           { NOTEQUAL }
+  | '&'            { BITAND }
+  | '^'            { BITXOR }
+  | '|'            { BITOR }
+  | "&&"           { LOGICALAND }
+  | "||"           { LOGICALOR }
+  | '?'            { QUESTIONMARK }
+  | ':'            { COLON }
   | '"'            { quoted_string [] lexbuf }
   | '+'            { PLUS }
   | '-'            { MINUS }
@@ -34,6 +47,8 @@ rule token = parse
   | ','            { COMMA }
   | ';'            { SEMICOLON }
   | '='            { EQUAL }
+  | id as lxm      { IDENTIFIER(lxm) }
+  | digit+ as lxm { LITERAL_INT(int_of_string lxm) }
   | eof            { raise Eof }
 
 and quoted_string pieces = parse

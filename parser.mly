@@ -8,6 +8,13 @@
 %token STRUCT
 %token PLUS MINUS TIMES DIV
 %token PLUSPLUS MINUSMINUS
+%token LSHIFT RSHIFT
+%token LESSTHAN LESSTHANEQUAL GREATERTHAN GREATERTHANEQUAL EQUALEQUAL NOTEQUAL
+%token BITAND BITXOR BITOR
+%token LOGICALAND
+%token LOGICALOR
+%token QUESTIONMARK
+%token COLON
 %token EQUAL
 %token LPAREN RPAREN
 %token LBRACE RBRACE
@@ -101,19 +108,37 @@ p4_expr
   | p4_expr MINUS p3_expr { Ast.BinOp (Ast.Sub, $1, $3) }
 ;
 
-p5_expr: p4_expr { $1 };
-p6_expr: p5_expr { $1 };
-p7_expr: p6_expr { $1 };
-p8_expr: p7_expr { $1 };
-p9_expr: p8_expr { $1 };
-p10_expr: p9_expr { $1 };
-p11_expr: p10_expr { $1 };
-p12_expr: p11_expr { $1 };
-p13_expr: p12_expr { $1 };
+p5_expr
+  : p4_expr { $1 }
+  | p5_expr LSHIFT p4_expr { Ast.BinOp (Ast.BitShiftLeft, $1, $3) }
+  | p5_expr RSHIFT p4_expr { Ast.BinOp (Ast.BitShiftRight, $1, $3) }
+;
 
+p6_expr
+  : p5_expr { $1 }
+  | p6_expr LESSTHAN p5_expr { Ast.BinOp (Ast.CompLT, $1, $3) }
+  | p6_expr LESSTHANEQUAL p5_expr { Ast.BinOp (Ast.CompLTE, $1, $3) }
+  | p6_expr GREATERTHAN p5_expr { Ast.BinOp (Ast.CompGT, $1, $3) }
+  | p6_expr GREATERTHANEQUAL p5_expr { Ast.BinOp (Ast.CompGTE, $1, $3) }
+;
+
+p7_expr
+  : p6_expr { $1 }
+  | p7_expr EQUALEQUAL p6_expr { Ast.BinOp (Ast.CompEQ, $1, $3) }
+  | p7_expr NOTEQUAL p6_expr { Ast.BinOp (Ast.CompNEQ, $1, $3) }
+;
+
+p8_expr : p7_expr { $1 } | p8_expr BITAND p7_expr { Ast.BinOp (Ast.BitAnd, $1, $3) };
+p9_expr : p8_expr { $1 } | p9_expr BITXOR p8_expr { Ast.BinOp (Ast.BitXor, $1, $3) };
+p10_expr : p9_expr { $1 } | p10_expr BITOR  p9_expr { Ast.BinOp (Ast.BitOr, $1, $3) };
+p11_expr : p10_expr { $1 } | p11_expr LOGICALAND p10_expr { Ast.LogicalAnd ($1, $3) };
+p12_expr : p11_expr { $1 } | p12_expr LOGICALOR p11_expr { Ast.LogicalOr ($1, $3) };
+p13_expr : p12_expr { $1 } | p12_expr QUESTIONMARK expr COLON p13_expr { Ast.Conditional ($1, $3, $5) };
+
+/* Note that the LHS of assignment is restricted to precedence 2 or higher operators */
 p14_expr
   : p13_expr { $1 }
-  | p13_expr EQUAL p14_expr { Ast.Assign ($1, $3) }
+  | p2_expr EQUAL p14_expr { Ast.Assign ($1, $3) }
 ;
 
 p15_expr
