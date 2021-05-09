@@ -250,40 +250,42 @@ let emit_func body =
     emit_stmt body; 
     (out_buffer, lit_table, !stack_bytes_allocated)
 
-let emit oc decl =
-    match decl with
-    | Function (func_name, func_body) ->
-        begin
-            let body_buf, lit_table, stack_bytes_allocated = emit_func func_body in
+let emit oc decl_list =
+    List.iter (fun decl ->
+        match decl with
+        | Function (func_name, func_body) ->
+            begin
+                let body_buf, lit_table, stack_bytes_allocated = emit_func func_body in
 
-            output_string oc "section .text\n";
+                output_string oc "section .text\n";
 
-            fprintf oc "global %s\n" func_name;
-            output_string oc "extern printf\n";
-            
-            fprintf oc "%s:\n" func_name;
-            output_string oc "\tpush rbp\n";
-            output_string oc "\tmov rbp, rsp\n";
+                fprintf oc "global %s\n" func_name;
+                output_string oc "extern printf\n";
+                
+                fprintf oc "%s:\n" func_name;
+                output_string oc "\tpush rbp\n";
+                output_string oc "\tmov rbp, rsp\n";
 
-            (* Stack needs to be 16 byte aligned *)
-            let eff_stack_bytes = (((stack_bytes_allocated - 1) / 16) + 1) * 16 in
-            fprintf oc "\tsub rsp, %d\n" eff_stack_bytes;
+                (* Stack needs to be 16 byte aligned *)
+                let eff_stack_bytes = (((stack_bytes_allocated - 1) / 16) + 1) * 16 in
+                fprintf oc "\tsub rsp, %d\n" eff_stack_bytes;
 
-            output_string oc (Buffer.contents body_buf);
+                output_string oc (Buffer.contents body_buf);
 
-            output_string oc "\tmov rax, 0\n";
-            output_string oc "\tmov rsp, rbp\n";
-            output_string oc "\tpop rbp\n";
-            output_string oc "\tret\n";
+                output_string oc "\tmov rax, 0\n";
+                output_string oc "\tmov rsp, rbp\n";
+                output_string oc "\tpop rbp\n";
+                output_string oc "\tret\n";
 
-            (* Output string literals *)
-            output_string oc "section .data\n";
-            Hashtbl.iter (fun lit id ->
-                fprintf oc "string_lit_%d:\n" id;
-                output_string oc "db ";
-                String.iter (fun c -> fprintf oc "%d, " (Char.code c)) lit;
+                (* Output string literals *)
+                output_string oc "section .data\n";
+                Hashtbl.iter (fun lit id ->
+                    fprintf oc "string_lit_%d:\n" id;
+                    output_string oc "db ";
+                    String.iter (fun c -> fprintf oc "%d, " (Char.code c)) lit;
 
-                (* NUL terminate *)
-                output_string oc "0\n";
-            ) lit_table;
-        end
+                    (* NUL terminate *)
+                    output_string oc "0\n";
+                ) lit_table;
+            end
+    ) decl_list

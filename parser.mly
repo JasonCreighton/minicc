@@ -23,16 +23,23 @@
 %token IF
 %token ELSE
 %token WHILE
-%token EOL
+%token EOF
 
 /* Hack to resolve "dangling else" shift/reduce conflict */
 %nonassoc RPAREN
 %nonassoc ELSE
 
-%start decl             /* the entry point */
-%type <Ast.decl> decl
+%start compilation_unit             /* the entry point */
+%type <Ast.decl list> compilation_unit
 %%
+
+compilation_unit : decl_list EOF { List.rev $1 };
+
+decl_list
+  : decl { [$1] }
+  | decl_list decl { $2 :: $1 }
 ;
+
 /* Total hack for now to get a minimal function parsing */
 decl:
   ctype IDENTIFIER LPAREN RPAREN compound_statement { Ast.Function ($2, $5) }

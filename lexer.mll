@@ -1,6 +1,5 @@
 {
 open Parser        (* The type token is defined in parser.mli *)
-exception Eof
 }
 let digit = ['0'-'9']
 let alpha = ['a'-'z' 'A'-'Z']
@@ -49,7 +48,7 @@ rule token = parse
   | '='            { EQUAL }
   | id as lxm      { IDENTIFIER(lxm) }
   | digit+ as lxm { LITERAL_INT(int_of_string lxm) }
-  | eof            { raise Eof }
+  | eof            { EOF }
 
 and quoted_string pieces = parse
     '"'   { LITERAL_STRING(String.concat "" (List.rev pieces)) } (* End of quoted string*)

@@ -11,5 +11,5 @@ let () =
     if !runtests then
         Tests.run_all ()
     else
-        Lexing.from_channel stdin |> Parser.decl Lexer.token |> Amd64.emit stdout;
+        Lexing.from_channel stdin |> Parser.compilation_unit Lexer.token |> Amd64.emit stdout;
         flush stdout
