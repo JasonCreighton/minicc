@@ -27,10 +27,9 @@ let sizeof ctype =
     | Float -> 4
     | Double -> 8
 
-let emit_func body =
+let emit_func func_table lit_table params body =
     (* Variables *)
     let out_buffer = Buffer.create 4096 in
-    let lit_table = Hashtbl.create 100 in
     let var_table = Hashtbl.create 100 in
     let stack_bytes_allocated = ref 0 in
     let next_label_id = ref 0 in
@@ -158,6 +157,9 @@ let emit_func body =
             asmf "jmp .label_%d" test_label_id;
             asm_rawf ".label_%d: ; end while\n" end_label_id;
         end
+        | ReturnStmt expr_opt ->
+            Option.iter emit_expr expr_opt;
+            asm "jmp .epilogue"
     and emit_expr expr =
         match expr with
         | Lit n -> asmf "mov rax, %d" n;
@@ -240,28 +242,40 @@ let emit_func body =
                 (* Evaluate arguments onto stack *)
                 List.iter (fun a -> emit_expr a; asm "push rax") (List.rev args);
 
-                (* Pop stack values into calling convention registers *)
-                List.iteri (fun i reg -> if i < (List.length args) then asmf "pop %s" reg else ()) call_registers;
-
-                (* FIXME: We will have to distinguish between library calls and user-defined calls because of the PLT *)
-                asmf "call %s WRT ..plt" func_name;
+                if Option.is_some (Hashtbl.find_opt func_table func_name) then (
+                    (* Call one of our functions *)
+                    asmf "call %s" func_name
+                ) else (
+                    (* Library call *)
+                    (* Pop stack values into calling convention registers *)
+                    List.iteri (fun i reg -> if i < (List.length args) then asmf "pop %s" reg else ()) call_registers;
+                    asmf "call %s WRT ..plt" func_name;
+                )
             end
     in
+    (* Put arguments into var_table *)
+    List.iteri (fun i (ctype, arg_name) -> Hashtbl.add var_table arg_name (-(i+2)*8, ctype)) params;
     emit_stmt body; 
-    (out_buffer, lit_table, !stack_bytes_allocated)
+    (out_buffer, !stack_bytes_allocated)
 
 let emit oc decl_list =
+    let func_table = Hashtbl.create 64 in
+    let lit_table = Hashtbl.create 100 in
+    List.iter (fun d ->
+        match d with
+        | Function (_, name, _, _) as func -> Hashtbl.add func_table name func
+    ) decl_list;
+
+    output_string oc "extern printf\n";
+    output_string oc "section .text\n";
+
     List.iter (fun decl ->
         match decl with
-        | Function (func_name, func_body) ->
+        | Function (ret_type, func_name, func_params, func_body) ->
             begin
-                let body_buf, lit_table, stack_bytes_allocated = emit_func func_body in
-
-                output_string oc "section .text\n";
+                let body_buf, stack_bytes_allocated = emit_func func_table lit_table func_params func_body in
 
                 fprintf oc "global %s\n" func_name;
-                output_string oc "extern printf\n";
-                
                 fprintf oc "%s:\n" func_name;
                 output_string oc "\tpush rbp\n";
                 output_string oc "\tmov rbp, rsp\n";
@@ -272,20 +286,21 @@ let emit oc decl_list =
 
                 output_string oc (Buffer.contents body_buf);
 
-                output_string oc "\tmov rax, 0\n";
+                output_string oc ".epilogue:\n";
                 output_string oc "\tmov rsp, rbp\n";
                 output_string oc "\tpop rbp\n";
                 output_string oc "\tret\n";
 
-                (* Output string literals *)
-                output_string oc "section .data\n";
-                Hashtbl.iter (fun lit id ->
-                    fprintf oc "string_lit_%d:\n" id;
-                    output_string oc "db ";
-                    String.iter (fun c -> fprintf oc "%d, " (Char.code c)) lit;
-
-                    (* NUL terminate *)
-                    output_string oc "0\n";
-                ) lit_table;
             end
-    ) decl_list
+    ) decl_list;
+
+    (* Output string literals *)
+    output_string oc "section .data\n";
+    Hashtbl.iter (fun lit id ->
+        fprintf oc "string_lit_%d:\n" id;
+        output_string oc "db ";
+        String.iter (fun c -> fprintf oc "%d, " (Char.code c)) lit;
+
+        (* NUL terminate *)
+        output_string oc "0\n";
+    ) lit_table;

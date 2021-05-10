@@ -23,6 +23,7 @@
 %token IF
 %token ELSE
 %token WHILE
+%token RETURN
 %token EOF
 
 /* Hack to resolve "dangling else" shift/reduce conflict */
@@ -40,9 +41,18 @@ decl_list
   | decl_list decl { $2 :: $1 }
 ;
 
-/* Total hack for now to get a minimal function parsing */
 decl:
-  ctype IDENTIFIER LPAREN RPAREN compound_statement { Ast.Function ($2, $5) }
+  ctype IDENTIFIER function_parameters compound_statement { Ast.Function ($1, $2, List.rev $3, $4) }
+;
+
+function_parameters
+  : LPAREN RPAREN { [] }
+  | LPAREN function_parameter_list RPAREN { $2 }
+;
+
+function_parameter_list
+  : ctype IDENTIFIER { [($1, $2)] }
+  | function_parameter_list COMMA ctype IDENTIFIER { ($3, $4) :: $1 }
 ;
 
 ctype
@@ -79,6 +89,8 @@ statement
   | IF LPAREN expr RPAREN statement { Ast.IfElseStmt ($3, $5, Ast.CompoundStmt []) }
   | IF LPAREN expr RPAREN statement ELSE statement { Ast.IfElseStmt ($3, $5, $7) }
   | WHILE LPAREN expr RPAREN statement { Ast.WhileStmt ($3, $5) }
+  | RETURN SEMICOLON { Ast.ReturnStmt None }
+  | RETURN expr SEMICOLON { Ast.ReturnStmt (Some $2) }
 ;
 
 /* Precedence taken from here: https://en.cppreference.com/w/c/language/operator_precedence */

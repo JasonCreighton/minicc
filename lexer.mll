@@ -17,6 +17,7 @@ rule token = parse
   | "if"           { IF }
   | "else"         { ELSE }
   | "while"        { WHILE }
+  | "return"       { RETURN }
   | "++"           { PLUSPLUS }
   | "--"           { MINUSMINUS }
   | "<<"           { LSHIFT }

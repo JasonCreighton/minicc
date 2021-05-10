@@ -1,24 +1,17 @@
-type decl =
-    | Function of string * stmt
-and int_size =
+type int_size =
     | Char
     | Short
     | Int
     | Long
-and ctype =
+
+type ctype =
     | Void
     | Signed of int_size
     | Unsigned of int_size
     | Float
     | Double
-and stmt =
-    | CompoundStmt of stmt list
-    | ExprStmt of expr
-    | IfElseStmt of expr * stmt * stmt
-    | DeclVar of ctype * string
-    | DeclAssign of ctype * string * expr
-    | WhileStmt of expr * stmt
-and binop =
+
+type binop =
     | Add
     | Sub
     | Mul
@@ -35,7 +28,8 @@ and binop =
     | CompGT
     | CompLTE
     | CompGTE
-and unaryop =
+
+type unaryop =
     | PreInc
     | PreDec
     | PostInc
@@ -43,6 +37,17 @@ and unaryop =
     | LogicalNot
     | BitNot
     | Neg
+
+type decl =
+    | Function of ctype * string * (ctype * string) list * stmt
+and stmt =
+    | CompoundStmt of stmt list
+    | ExprStmt of expr
+    | IfElseStmt of expr * stmt * stmt
+    | DeclVar of ctype * string
+    | DeclAssign of ctype * string * expr
+    | WhileStmt of expr * stmt
+    | ReturnStmt of expr option
 and expr =
     | Lit of int
     | LitString of string

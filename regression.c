@@ -1,3 +1,7 @@
+int sub(int x, int y) {
+    return x - y;
+}
+
 int main() {
     unsigned char w;
     short x = 42;
@@ -16,6 +20,7 @@ int main() {
     printf("y >> 1 = %d\n", y >> 1);
     printf("x > y = %d\n", x > y);
     printf("x < y = %d\n", x < y);
+    printf("sub(x, y) = %d\n", sub(x, y));
 
     printf("testing\n"), printf("comma\n"), printf("operator\n");    
 
