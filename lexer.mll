@@ -6,7 +6,7 @@ let alpha = ['a'-'z' 'A'-'Z']
 let hex = ['0'-'9' 'a'-'f' 'A'-'F']
 let id    = alpha (alpha|digit)*
 rule token = parse
-    [' ' '\t' '\n']     { token lexbuf }     (* skip blanks *)
+    [' ' '\t' '\r' '\n']     { token lexbuf }     (* skip blanks *)
   | "char"         { CHAR }
   | "short"        { SHORT }
   | "int"          { INT }
