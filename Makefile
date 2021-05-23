@@ -1,3 +1,6 @@
+MAKEFLAGS += --no-builtin-rules
+.DELETE_ON_ERROR:
+
 SOURCES = ast.ml amd64.ml parser.mli parser.ml lexer.ml tests.ml main.ml
 
 .PHONY: all test test_ocaml test_regression
