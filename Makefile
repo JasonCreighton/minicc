@@ -1,46 +1,57 @@
 MAKEFLAGS += --no-builtin-rules
 .DELETE_ON_ERROR:
 
+# Kind of hack, we create the "build" directory when the Makefile is parsed
+# instead of trying to have it be a target, which is hard for "make" to
+# handle nicely for some reason.
+$(shell mkdir -p build)
+
 SOURCES = ast.ml amd64.ml parser.mli parser.ml lexer.ml tests.ml main.ml
+BUILD_SOURCES = $(addprefix build/,$(SOURCES))
 
-.PHONY: all test test_ocaml test_regression
+.PHONY: all clean test test_ocaml test_regression
 
-all: minicc
+all: test
+
+# ocamlopt seems to need the source files in the same directory as the output
+# files, so we copy them in as needed.
+build/% : %
+	cp $< $@
 
 clean:
-	rm -f minicc parser.ml parser.mli parser.output lexer.ml regression.asm regression regression_golden regression_actual_out.txt regression_expected_out.txt *.cmi *.cmx *.o
+	rm -rf ./build
 
-parser.ml parser.mli parser.output: parser.mly
-	ocamlyacc -v --strict parser.mly
+build/parser.ml build/parser.mli build/parser.output: build/parser.mly
+	ocamlyacc -v --strict build/parser.mly
 
-lexer.ml: lexer.mll
-	ocamllex lexer.mll
+build/lexer.ml: build/lexer.mll
+	ocamllex build/lexer.mll
 
-minicc: $(SOURCES)
-	ocamlopt -w +a -o minicc $(SOURCES)
+build/minicc: $(BUILD_SOURCES)
+	ocamlopt -w +a -o build/minicc -I build $(BUILD_SOURCES)
 
-regression.asm: minicc regression.c
-	./minicc < regression.c > regression.asm	
+build/regression.asm: build/minicc regression.c
+	./build/minicc < regression.c > build/regression.asm	
 
-regression.o: regression.asm
-	nasm -felf64 regression.asm
+build/regression.o: build/regression.asm
+	nasm -felf64 build/regression.asm
 
-regression: regression.o
-	gcc regression.o -o regression
+build/regression: build/regression.o
+	gcc build/regression.o -o build/regression
 
-regression_golden: regression.c
-	gcc regression.c -o regression_golden
+build/regression_golden: regression.c
+	gcc regression.c -o build/regression_golden
 
-regression_actual_out.txt: regression
-	./regression > regression_actual_out.txt
+build/regression_actual_out.txt: build/regression
+	./build/regression > ./build/regression_actual_out.txt
 
-regression_expected_out.txt: regression_golden
-	./regression_golden > regression_expected_out.txt
+build/regression_expected_out.txt: build/regression_golden
+	./build/regression_golden > ./build/regression_expected_out.txt
 
-test_regression: regression_expected_out.txt regression_actual_out.txt
-	diff -u regression_expected_out.txt regression_actual_out.txt
+test_regression: build/regression_expected_out.txt build/regression_actual_out.txt
+	diff -u build/regression_expected_out.txt build/regression_actual_out.txt
 
-test_ocaml: minicc
-	./minicc -runtests
+test_ocaml: build/minicc
+	./build/minicc -runtests
 
 test: test_ocaml test_regression
