@@ -4,7 +4,7 @@ MAKEFLAGS += --no-builtin-rules
 # Kind of hack, we create the "build" directory when the Makefile is parsed
 # instead of trying to have it be a target, which is hard for "make" to
 # handle nicely for some reason.
-$(shell mkdir -p build)
+_MKDIRS := $(shell mkdir -p build)
 
 SOURCES = ast.ml amd64.ml parser.mli parser.ml lexer.ml tests.ml main.ml
 BUILD_SOURCES = $(addprefix build/,$(SOURCES))
