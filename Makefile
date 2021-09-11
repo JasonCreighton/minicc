@@ -28,7 +28,7 @@ build/lexer.ml: build/lexer.mll
 	ocamllex build/lexer.mll
 
 build/minicc: $(BUILD_SOURCES)
-	ocamlopt -w +a -o build/minicc -I build $(BUILD_SOURCES)
+	ocamlopt -w +a -S -o build/minicc -I build $(BUILD_SOURCES)
 
 build/regression.asm: build/minicc regression.c
 	./build/minicc < regression.c > build/regression.asm	
