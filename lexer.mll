@@ -18,6 +18,9 @@ rule token = parse
   | "else"         { ELSE }
   | "while"        { WHILE }
   | "return"       { RETURN }
+  | "extern"       { EXTERN }
+  | "const"        { CONST }
+  | "..."          { ELLIPSIS }
   | "++"           { PLUSPLUS }
   | "--"           { MINUSMINUS }
   | "<<"           { LSHIFT }

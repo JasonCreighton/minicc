@@ -2,6 +2,7 @@
 %token <string> IDENTIFIER
 %token <string> LITERAL_STRING
 %token VOID
+%token CONST
 %token CHAR SHORT INT LONG
 %token FLOAT DOUBLE
 %token SIGNED UNSIGNED
@@ -24,6 +25,8 @@
 %token ELSE
 %token WHILE
 %token RETURN
+%token EXTERN
+%token ELLIPSIS
 %token EOF
 
 /* Hack to resolve "dangling else" shift/reduce conflict */
@@ -41,8 +44,9 @@ decl_list
   | decl_list decl { $2 :: $1 }
 ;
 
-decl:
-  ctype IDENTIFIER function_parameters compound_statement { Ast.Function ($1, $2, List.rev $3, $4) }
+decl
+  : ctype IDENTIFIER function_parameters compound_statement { Ast.Function ($1, $2, List.rev $3, $4) }
+  | EXTERN ctype IDENTIFIER function_parameters SEMICOLON { Ast.FunctionDecl ($2, $3, List.rev $4) }
 ;
 
 function_parameters
@@ -53,9 +57,17 @@ function_parameters
 function_parameter_list
   : ctype IDENTIFIER { [($1, $2)] }
   | function_parameter_list COMMA ctype IDENTIFIER { ($3, $4) :: $1 }
+  | function_parameter_list COMMA ELLIPSIS { $1 } /* Ignore varargs for now */
 ;
 
 ctype
+  : primitive_type { $1 }
+  | CONST primitive_type { $2 } /* Ignore const for now */
+  | primitive_type TIMES { $1 } /* Ignore pointer specifiers for now */
+  | CONST primitive_type TIMES { $2 } /* Ignore const and pointer specifiers for now */
+;
+
+primitive_type
   : VOID { Ast.Void }
   | int_size { Ast.Signed $1 }
   | SIGNED int_size { Ast.Signed $2 }

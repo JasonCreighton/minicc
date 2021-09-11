@@ -40,6 +40,7 @@ type unaryop =
 
 type decl =
     | Function of ctype * string * (ctype * string) list * stmt
+    | FunctionDecl of ctype * string * (ctype * string) list
 and stmt =
     | CompoundStmt of stmt list
     | ExprStmt of expr

@@ -1,3 +1,5 @@
+extern int printf(const char *fmt, ...);
+
 int func3() {
     printf("func3\n");
 

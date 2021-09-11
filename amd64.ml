@@ -264,6 +264,7 @@ let emit oc decl_list =
     List.iter (fun d ->
         match d with
         | Function (_, name, _, _) as func -> Hashtbl.add func_table name func
+        | FunctionDecl _ -> ()
     ) decl_list;
 
     output_string oc "extern printf\n";
@@ -292,6 +293,7 @@ let emit oc decl_list =
                 output_string oc "\tret\n";
 
             end
+        | FunctionDecl _ -> ()
     ) decl_list;
 
     (* Output string literals *)
