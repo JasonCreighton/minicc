@@ -122,7 +122,8 @@ let emit_func func_table lit_table params body =
 
             if yield_old_value then asm "mov rax, rcx";
         end
-        | _ -> raise (Compile_error "Pre-Increment/Decrement of non-lvalue")
+        (* TODO: This is a ugly way to clear the fragile pattern match warning *)
+        |Lit _|LitString _|Assign (_, _)|BinOp (_, _, _)|UnaryOp (_, _)|Conditional (_, _, _)|Sequence (_, _)|LogicalAnd (_, _)|LogicalOr (_, _)|Call (_, _) -> raise (Compile_error "Pre-Increment/Decrement of non-lvalue")
     and emit_stmt stmt =
         match stmt with
         | DeclVar (ctype, v) -> decl_var ctype v
@@ -272,7 +273,7 @@ let emit oc decl_list =
 
     List.iter (fun decl ->
         match decl with
-        | Function (ret_type, func_name, func_params, func_body) ->
+        | Function (_, func_name, func_params, func_body) ->
             begin
                 let body_buf, stack_bytes_allocated = emit_func func_table lit_table func_params func_body in
 
