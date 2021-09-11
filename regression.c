@@ -1,3 +1,19 @@
+int func3() {
+    printf("func3\n");
+
+    return 0;
+}
+
+int func2() {
+    printf("func2\n");
+    return func3();
+}
+
+int func1() {
+    printf("func1\n");
+    return func2();
+}
+
 int sub(int x, int y) {
     return x - y;
 }
@@ -46,4 +62,6 @@ int main() {
         }
         x = x - 1;
     }
+
+    return func1();
 }

@@ -106,6 +106,7 @@ p1_expr
   | p1_expr PLUSPLUS { Ast.UnaryOp (Ast.PostInc, $1) }
   | p1_expr MINUSMINUS { Ast.UnaryOp (Ast.PostDec, $1) }
   | IDENTIFIER LPAREN argument_list RPAREN { Ast.Call ($1, List.rev $3) }
+  | IDENTIFIER LPAREN RPAREN { Ast.Call ($1, []) }
 ;
 
 p2_expr
