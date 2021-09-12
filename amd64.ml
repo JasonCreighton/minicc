@@ -26,6 +26,7 @@ let sizeof ctype =
     | Signed x | Unsigned x -> sizeof_int x
     | Float -> 4
     | Double -> 8
+    | PointerTo _ -> 8
 
 let emit_func func_table lit_table params body =
     (* Variables *)
@@ -104,6 +105,7 @@ let emit_func func_table lit_table params body =
             | Unsigned Short -> ("movzx", "rax", "word")
             | Unsigned Int -> ("mov", "eax", "dword")
             | Unsigned Long -> ("mov", "rax", "qword")
+            | PointerTo _ -> ("mov", "rax", "qword")
             | Void | Float | Double -> failwith "TODO: Implement more types"
         in
         asmf "%s %s, %s [rbp - %d]" inst dest_reg width loc
@@ -250,7 +252,12 @@ let emit_func func_table lit_table params body =
                     (* Library call *)
                     (* Pop stack values into calling convention registers *)
                     List.iteri (fun i reg -> if i < (List.length args) then asmf "pop %s" reg else ()) call_registers;
+
+                    (* FIXME: Terrible hack to align stack to 16 bytes before calling library function, this should be done statically *)
+                    asm "mov rbx, rsp"; (* Save old stack pointer in callee-save register *)
+                    asm "and rsp, -16"; (* Align stack *)
                     asmf "call %s WRT ..plt" func_name;
+                    asm "mov rsp, rbx" (* Restore old stack pointer *)
                 )
             end
     in
@@ -283,9 +290,9 @@ let emit decl_list =
                 Buffer.add_string ob "\tpush rbp\n";
                 Buffer.add_string ob "\tmov rbp, rsp\n";
 
-                (* Stack needs to be 16 byte aligned *)
-                let eff_stack_bytes = (((stack_bytes_allocated - 1) / 16) + 1) * 16 in
-                bprintf ob "\tsub rsp, %d\n" eff_stack_bytes;
+                (* Stack needs to be 8 byte aligned *)
+                let eff_stack_bytes = ((stack_bytes_allocated + 7) / 8)  * 8 in
+                if eff_stack_bytes > 0 then bprintf ob "\tsub rsp, %d\n" eff_stack_bytes;
 
                 Buffer.add_buffer ob body_buf;
 

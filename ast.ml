@@ -10,6 +10,7 @@ type ctype =
     | Unsigned of int_size
     | Float
     | Double
+    | PointerTo of ctype
 
 type binop =
     | Add

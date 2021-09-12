@@ -1,5 +1,9 @@
 extern int printf(const char *fmt, ...);
 
+void begin_test(const char *test_name) {
+    printf("=== %s ===\n", test_name);
+}
+
 int func3() {
     printf("func3\n");
 
@@ -20,11 +24,19 @@ int sub(int x, int y) {
     return x - y;
 }
 
+void test_nested_calls() {
+    begin_test("test_nested_calls");
+
+    printf("func1() = %d\n", func1());
+}
+
 int main() {
     unsigned char w;
     short x = 42;
     int y = 15;
     long z = 100;
+
+    begin_test("main");
 
     w = 250;
 
@@ -39,6 +51,7 @@ int main() {
     printf("x > y = %d\n", x > y);
     printf("x < y = %d\n", x < y);
     printf("sub(x, y) = %d\n", sub(x, y));
+    printf(" Call printf with temporaries = %d\n", printf("X") + printf("XX") + printf("XXX") + printf("XXXX"));
 
     printf("testing\n"), printf("comma\n"), printf("operator\n");    
 
@@ -65,5 +78,7 @@ int main() {
         x = x - 1;
     }
 
-    return func1();
+    test_nested_calls();
+
+    return 0;
 }

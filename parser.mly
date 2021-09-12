@@ -63,8 +63,8 @@ function_parameter_list
 ctype
   : primitive_type { $1 }
   | CONST primitive_type { $2 } /* Ignore const for now */
-  | primitive_type TIMES { $1 } /* Ignore pointer specifiers for now */
-  | CONST primitive_type TIMES { $2 } /* Ignore const and pointer specifiers for now */
+  | primitive_type TIMES { Ast.PointerTo $1 }
+  | CONST primitive_type TIMES { Ast.PointerTo $2 } /* Ignore const for now */
 ;
 
 primitive_type

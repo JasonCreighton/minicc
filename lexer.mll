@@ -4,7 +4,7 @@ open Parser        (* The type token is defined in parser.mli *)
 let digit = ['0'-'9']
 let alpha = ['a'-'z' 'A'-'Z']
 let hex = ['0'-'9' 'a'-'f' 'A'-'F']
-let id    = alpha (alpha|digit)*
+let id    = alpha (alpha|digit|'_')*
 rule token = parse
     [' ' '\t' '\r' '\n']     { token lexbuf }     (* skip blanks *)
   | "char"         { CHAR }
@@ -13,6 +13,7 @@ rule token = parse
   | "long"         { LONG }
   | "signed"       { SIGNED }
   | "unsigned"     { UNSIGNED }
+  | "void"         { VOID }
   | "struct"       { STRUCT }
   | "if"           { IF }
   | "else"         { ELSE }
