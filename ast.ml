@@ -49,6 +49,7 @@ and stmt =
     | DeclVar of ctype * string
     | DeclAssign of ctype * string * expr
     | WhileStmt of expr * stmt
+    | ForStmt of expr * expr * expr * stmt
     | ReturnStmt of expr option
 and expr =
     | Lit of int

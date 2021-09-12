@@ -126,6 +126,27 @@ let emit_func func_table lit_table params body =
         end
         (* TODO: This is a ugly way to clear the fragile pattern match warning *)
         |Lit _|LitString _|Assign (_, _)|BinOp (_, _, _)|UnaryOp (_, _)|Conditional (_, _, _)|Sequence (_, _)|LogicalAnd (_, _)|LogicalOr (_, _)|Call (_, _) -> raise (Compile_error "Pre-Increment/Decrement of non-lvalue")
+    and emit_loop init_opt cond incr_opt body = begin
+        let test_label_id = new_label () in
+        let end_label_id = new_label () in
+
+        Option.iter emit_expr init_opt;
+
+        (* Loop test *)
+        asm_rawf ".label_%d: ; loop test\n" test_label_id;
+        emit_expr cond;
+        asm "cmp rax, 0";
+        asmf "je .label_%d" end_label_id;
+
+        (* Loop body *)
+        emit_stmt body;
+
+        (* Loop increment *)
+        Option.iter emit_expr incr_opt;
+
+        asmf "jmp .label_%d" test_label_id;
+        asm_rawf ".label_%d: ; end while\n" end_label_id;
+    end
     and emit_stmt stmt =
         match stmt with
         | DeclVar (ctype, v) -> decl_var ctype v
@@ -144,22 +165,8 @@ let emit_func func_table lit_table params body =
             emit_stmt else_stmt;
             asm_rawf ".label_%d: ; end if\n" done_label_id
         end
-        | WhileStmt (cond, body) -> begin           
-            let test_label_id = new_label () in
-            let end_label_id = new_label () in
-
-            (* Loop test *)
-            asm_rawf ".label_%d: ; while test\n" test_label_id;
-            emit_expr cond;
-            asm "cmp rax, 0";
-            asmf "je .label_%d" end_label_id;
-
-            (* Loop body *)
-            emit_stmt body;
-
-            asmf "jmp .label_%d" test_label_id;
-            asm_rawf ".label_%d: ; end while\n" end_label_id;
-        end
+        | WhileStmt (cond, body) -> emit_loop Option.none cond Option.none body
+        | ForStmt (init, cond, incr, body) -> emit_loop (Option.some init) cond (Option.some incr) body
         | ReturnStmt expr_opt ->
             Option.iter emit_expr expr_opt;
             asm "jmp .epilogue"

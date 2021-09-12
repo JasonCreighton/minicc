@@ -7,7 +7,7 @@
 %token FLOAT DOUBLE
 %token SIGNED UNSIGNED
 %token STRUCT
-%token PLUS MINUS TIMES DIV
+%token PLUS MINUS TIMES DIV REM
 %token PLUSPLUS MINUSMINUS
 %token LSHIFT RSHIFT
 %token LESSTHAN LESSTHANEQUAL GREATERTHAN GREATERTHANEQUAL EQUALEQUAL NOTEQUAL
@@ -23,6 +23,7 @@
 %token SEMICOLON
 %token IF
 %token ELSE
+%token FOR
 %token WHILE
 %token RETURN
 %token EXTERN
@@ -101,6 +102,7 @@ statement
   | IF LPAREN expr RPAREN statement { Ast.IfElseStmt ($3, $5, Ast.CompoundStmt []) }
   | IF LPAREN expr RPAREN statement ELSE statement { Ast.IfElseStmt ($3, $5, $7) }
   | WHILE LPAREN expr RPAREN statement { Ast.WhileStmt ($3, $5) }
+  | FOR LPAREN expr SEMICOLON expr SEMICOLON expr RPAREN statement { Ast.ForStmt ($3, $5, $7, $9) }
   | RETURN SEMICOLON { Ast.ReturnStmt None }
   | RETURN expr SEMICOLON { Ast.ReturnStmt (Some $2) }
 ;
@@ -131,7 +133,8 @@ p2_expr
 p3_expr
   : p2_expr { $1 }
   | p3_expr TIMES p2_expr { Ast.BinOp (Ast.Mul, $1, $3) }
-  | p3_expr DIV p2_expr { Ast.BinOp (Ast.Mul, $1, $3) }
+  | p3_expr DIV p2_expr { Ast.BinOp (Ast.Div, $1, $3) }
+  | p3_expr REM p2_expr { Ast.BinOp (Ast.Rem, $1, $3) }
 ;
 
 p4_expr

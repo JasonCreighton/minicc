@@ -17,6 +17,7 @@ rule token = parse
   | "struct"       { STRUCT }
   | "if"           { IF }
   | "else"         { ELSE }
+  | "for"          { FOR }
   | "while"        { WHILE }
   | "return"       { RETURN }
   | "extern"       { EXTERN }
@@ -44,6 +45,7 @@ rule token = parse
   | '-'            { MINUS }
   | '*'            { TIMES }
   | '/'            { DIV }
+  | '%'            { REM }
   | '('            { LPAREN }
   | ')'            { RPAREN }
   | '{'            { LBRACE }

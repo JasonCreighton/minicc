@@ -30,6 +30,38 @@ void test_nested_calls() {
     printf("func1() = %d\n", func1());
 }
 
+void test_signed_integer_operations() {
+    int x;
+    int y;
+
+    begin_test("test_signed_integer_operations");
+
+    for(x = -10; x <= 10; ++x) {
+        for(y = -10; y <= 10; ++y) {
+            printf("%d + %d = %d\n", x, y, x + y);
+            printf("%d - %d = %d\n", x, y, x - y);
+            printf("%d * %d = %d\n", x, y, x * y);
+
+            if(y != 0) printf("%d / %d = %d\n", x, y, x / y);
+            if(y != 0) printf("%d %% %d = %d\n", x, y, x % y);
+
+            if(y >= 0) printf("%d << %d = %d\n", x, y, x << y);
+            if(y >= 0) printf("%d >> %d = %d\n", x, y, x >> y);
+
+            printf("%d & %d = %d\n", x, y, x & y);
+            printf("%d | %d = %d\n", x, y, x | y);
+            printf("%d ^ %d = %d\n", x, y, x ^ y);
+
+            printf("%d > %d = %d\n", x, y, x > y);
+            printf("%d < %d = %d\n", x, y, x < y);
+            printf("%d >= %d = %d\n", x, y, x >= y);
+            printf("%d <= %d = %d\n", x, y, x <= y);
+            printf("%d != %d = %d\n", x, y, x != y);
+            printf("%d == %d = %d\n", x, y, x == y);
+        }
+    }
+}
+
 int main() {
     unsigned char w;
     short x = 42;
@@ -79,6 +111,7 @@ int main() {
     }
 
     test_nested_calls();
+    test_signed_integer_operations();
 
     return 0;
 }
