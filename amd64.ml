@@ -259,17 +259,18 @@ let emit_func func_table lit_table params body =
     emit_stmt body; 
     (out_buffer, !stack_bytes_allocated)
 
-let emit oc decl_list =
+let emit decl_list =
     let func_table = Hashtbl.create 64 in
     let lit_table = Hashtbl.create 100 in
+    let ob = Buffer.create 4096 in
     List.iter (fun d ->
         match d with
         | Function (_, name, _, _) as func -> Hashtbl.add func_table name func
         | FunctionDecl _ -> ()
     ) decl_list;
 
-    output_string oc "extern printf\n";
-    output_string oc "section .text\n";
+    Buffer.add_string ob "extern printf\n";
+    Buffer.add_string ob "section .text\n";
 
     List.iter (fun decl ->
         match decl with
@@ -277,33 +278,36 @@ let emit oc decl_list =
             begin
                 let body_buf, stack_bytes_allocated = emit_func func_table lit_table func_params func_body in
 
-                fprintf oc "global %s\n" func_name;
-                fprintf oc "%s:\n" func_name;
-                output_string oc "\tpush rbp\n";
-                output_string oc "\tmov rbp, rsp\n";
+                bprintf ob "global %s\n" func_name;
+                bprintf ob "%s:\n" func_name;
+                Buffer.add_string ob "\tpush rbp\n";
+                Buffer.add_string ob "\tmov rbp, rsp\n";
 
                 (* Stack needs to be 16 byte aligned *)
                 let eff_stack_bytes = (((stack_bytes_allocated - 1) / 16) + 1) * 16 in
-                fprintf oc "\tsub rsp, %d\n" eff_stack_bytes;
+                bprintf ob "\tsub rsp, %d\n" eff_stack_bytes;
 
-                output_string oc (Buffer.contents body_buf);
+                Buffer.add_buffer ob body_buf;
 
-                output_string oc ".epilogue:\n";
-                output_string oc "\tmov rsp, rbp\n";
-                output_string oc "\tpop rbp\n";
-                output_string oc "\tret\n";
+                Buffer.add_string ob ".epilogue:\n";
+                Buffer.add_string ob "\tmov rsp, rbp\n";
+                Buffer.add_string ob "\tpop rbp\n";
+                Buffer.add_string ob "\tret\n";
 
             end
         | FunctionDecl _ -> ()
     ) decl_list;
 
     (* Output string literals *)
-    output_string oc "section .data\n";
+    Buffer.add_string ob "section .data\n";
     Hashtbl.iter (fun lit id ->
-        fprintf oc "string_lit_%d:\n" id;
-        output_string oc "db ";
-        String.iter (fun c -> fprintf oc "%d, " (Char.code c)) lit;
+        bprintf ob "string_lit_%d:\n" id;
+        Buffer.add_string ob "db ";
+        String.iter (fun c -> bprintf ob "%d, " (Char.code c)) lit;
 
         (* NUL terminate *)
-        output_string oc "0\n";
+        Buffer.add_string ob "0\n";
     ) lit_table;
+
+    (* Return buffer *)
+    ob
