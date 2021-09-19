@@ -62,6 +62,25 @@ void test_signed_integer_operations() {
     }
 }
 
+void test_arrays() {
+    int ary[10];
+    int ary_2d[5][10];
+    int i;
+    int j;
+
+    begin_test("test_arrays");
+
+    for(i = 0; i < 10; ++i) ary[i] = i - 5;
+    for(i = 0; i < 10; ++i) printf("ary[%d] = %d\n", i, ary[i]);
+
+    for(i = 0; i < 5; ++i) {
+        for(j = 0; j < 10; ++j) {
+            ary_2d[i][j] = i * j;
+            printf("ary_2d[%d][%d] = %d\n", i, j, ary_2d[i][j]);
+        }
+    }
+}
+
 int main() {
     unsigned char w;
     short x = 42;
@@ -112,6 +131,7 @@ int main() {
 
     test_nested_calls();
     test_signed_integer_operations();
+    test_arrays();
 
     return 0;
 }

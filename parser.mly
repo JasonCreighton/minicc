@@ -18,6 +18,7 @@
 %token COLON
 %token EQUAL
 %token LPAREN RPAREN
+%token LBRACKET RBRACKET
 %token LBRACE RBRACE
 %token COMMA
 %token SEMICOLON
@@ -56,9 +57,14 @@ function_parameters
 ;
 
 function_parameter_list
-  : ctype IDENTIFIER { [($1, $2)] }
-  | function_parameter_list COMMA ctype IDENTIFIER { ($3, $4) :: $1 }
+  : named_ctype { [$1] }
+  | function_parameter_list COMMA named_ctype { $3 :: $1 }
   | function_parameter_list COMMA ELLIPSIS { $1 } /* Ignore varargs for now */
+;
+
+named_ctype
+  : ctype IDENTIFIER { ($1, $2) }
+  | ctype IDENTIFIER postfix_ctype_modifiers { ($3 $1, $2) } /* $3 is a function */
 ;
 
 ctype
@@ -67,6 +73,12 @@ ctype
   | primitive_type TIMES { Ast.PointerTo $1 }
   | CONST primitive_type TIMES { Ast.PointerTo $2 } /* Ignore const for now */
 ;
+
+/* Kind of an odd production, it returns a function that should be applied to
+   the ctype in order to yield the modified ctype. */
+postfix_ctype_modifiers
+  : LBRACKET LITERAL_INT RBRACKET { fun typ -> Ast.ArrayOf (typ, $2) }
+  | LBRACKET LITERAL_INT RBRACKET postfix_ctype_modifiers { fun typ -> $4 @@ Ast.ArrayOf (typ, $2) }
 
 primitive_type
   : VOID { Ast.Void }
@@ -97,7 +109,7 @@ statement_list:
 statement
   : expr SEMICOLON { Ast.ExprStmt $1 }
   | compound_statement { $1 }
-  | ctype IDENTIFIER SEMICOLON { Ast.DeclVar ($1, $2) }
+  | named_ctype SEMICOLON { let (name, typ) = $1 in Ast.DeclVar (name, typ) }
   | ctype IDENTIFIER EQUAL expr SEMICOLON { Ast.DeclAssign ($1, $2, $4) }  
   | IF LPAREN expr RPAREN statement { Ast.IfElseStmt ($3, $5, Ast.CompoundStmt []) }
   | IF LPAREN expr RPAREN statement ELSE statement { Ast.IfElseStmt ($3, $5, $7) }
@@ -121,6 +133,7 @@ p1_expr
   | p1_expr MINUSMINUS { Ast.UnaryOp (Ast.PostDec, $1) }
   | IDENTIFIER LPAREN argument_list RPAREN { Ast.Call ($1, List.rev $3) }
   | IDENTIFIER LPAREN RPAREN { Ast.Call ($1, []) }
+  | p1_expr LBRACKET expr RBRACKET { Ast.Subscript ($1, $3) }
 ;
 
 p2_expr

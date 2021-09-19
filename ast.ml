@@ -11,6 +11,7 @@ type ctype =
     | Float
     | Double
     | PointerTo of ctype
+    | ArrayOf of ctype * int
 
 type binop =
     | Add
@@ -56,6 +57,7 @@ and expr =
     | LitString of string
     | Assign of expr * expr
     | VarRef of string
+    | Subscript of expr * expr
     | BinOp of binop * expr * expr
     | UnaryOp of unaryop * expr
     | Conditional of expr * expr * expr (* "ternary" operator *)
