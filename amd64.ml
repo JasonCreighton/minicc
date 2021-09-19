@@ -120,15 +120,19 @@ let emit_func func_table lit_table params body =
             | Void | Float | Double -> failwith "TODO: Implement more types"
         );
         ctype
-    and load_address_of_subscript ary idx =
-        let ArrayOf (elem_ctype, _) = emit_expr ary in
-        asm "push rax";
-        emit_expr idx |> ignore;
-        asmf "imul rax, %d" (sizeof elem_ctype);
-        asm "pop rbx";
-        asm "lea rax, [rbx + rax]";
-
-        elem_ctype
+    and load_address_of_lvalue expr =
+        match expr with
+        | VarRef v -> let loc, ctype = find_var_loc v in asmf "lea rax, [rbp - %d]" loc; ctype
+        | Subscript (ary, idx) -> begin
+            let ArrayOf (elem_ctype, ary_len) = load_address_of_lvalue ary in
+            asm "push rax";
+            emit_expr idx |> ignore;
+            asmf "imul rax, %d" (sizeof elem_ctype);
+            asm "pop rbx";
+            asm "lea rax, [rbx + rax]";
+            elem_ctype
+        end
+        | _ -> raise (Compile_error "expr is not an lvalue")
     and assign_var v expr =
         let _, ctype = find_var_loc v in
         emit_expr expr |> ignore;
@@ -192,24 +196,23 @@ let emit_func func_table lit_table params body =
         | ForStmt (init, cond, incr, body) -> emit_loop (Option.some init) cond (Option.some incr) body
         | ReturnStmt expr_opt ->
             Option.iter (fun e -> emit_expr e |> ignore) expr_opt;
-            asm "jmp .epilogue"
+            asm "jmp .epilogue"    
     and emit_expr expr =
         match expr with
         | Lit n -> asmf "mov rax, %d" n; Signed Long
         | LitString s -> asmf "mov rax, string_lit_%d" (id_of_string_lit lit_table s); PointerTo (Unsigned Char)
         | Assign (VarRef v, rhs) -> assign_var v rhs
-        | Assign (Subscript (ary, idx), rhs) -> begin
-            let elem_ctype = load_address_of_subscript ary idx in
+        | Assign (lvalue, rhs) -> begin
+            let lhs_ctype = load_address_of_lvalue lvalue in
             asm "push rax";
             let rhs_ctype = emit_expr rhs in
             asm "pop rbx";
-            asmf "mov [rbx], %s" (acc_reg_name elem_ctype);
+            asmf "mov [rbx], %s" (acc_reg_name lhs_ctype);
             rhs_ctype
         end
-        | Assign (_, _) -> raise (Compile_error "Assignment to non-lvalue")
         | VarRef v -> load_var_to_accumulator v
-        | Subscript (ary, idx) -> begin
-            let elem_ctype = load_address_of_subscript ary idx in
+        | Subscript (_, _) -> begin
+            let elem_ctype = load_address_of_lvalue expr in
             asmf "mov %s, [rax]" (acc_reg_name elem_ctype); (* FIXME: Seems like I should have to deal with sign extension here? *)
             elem_ctype
         end

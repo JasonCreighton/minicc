@@ -78,7 +78,7 @@ ctype
    the ctype in order to yield the modified ctype. */
 postfix_ctype_modifiers
   : LBRACKET LITERAL_INT RBRACKET { fun typ -> Ast.ArrayOf (typ, $2) }
-  | LBRACKET LITERAL_INT RBRACKET postfix_ctype_modifiers { fun typ -> $4 @@ Ast.ArrayOf (typ, $2) }
+  | LBRACKET LITERAL_INT RBRACKET postfix_ctype_modifiers { fun typ -> Ast.ArrayOf ($4 typ, $2) }
 
 primitive_type
   : VOID { Ast.Void }
