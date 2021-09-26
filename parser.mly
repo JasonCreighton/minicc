@@ -11,9 +11,11 @@
 %token PLUSPLUS MINUSMINUS
 %token LSHIFT RSHIFT
 %token LESSTHAN LESSTHANEQUAL GREATERTHAN GREATERTHANEQUAL EQUALEQUAL NOTEQUAL
-%token BITAND BITXOR BITOR
+%token AMPERSAND
+%token BITXOR BITOR
 %token LOGICALAND
 %token LOGICALOR
+%token ADDRESSOF
 %token QUESTIONMARK
 %token COLON
 %token EQUAL
@@ -64,21 +66,28 @@ function_parameter_list
 
 named_ctype
   : ctype IDENTIFIER { ($1, $2) }
-  | ctype IDENTIFIER postfix_ctype_modifiers { ($3 $1, $2) } /* $3 is a function */
+  | ctype prefix_ctype_modifiers IDENTIFIER { ($1 |> $2, $3) }
+  | ctype IDENTIFIER postfix_ctype_modifiers { ($1 |> $3, $2) }
+  /* We apply the prefix modifier first. (eg, "int *x[5]" is an array of pointers to int, not a pointer to an array of ints) */
+  | ctype prefix_ctype_modifiers IDENTIFIER postfix_ctype_modifiers { ($1 |> $2 |> $4, $3) }
 ;
 
 ctype
   : primitive_type { $1 }
   | CONST primitive_type { $2 } /* Ignore const for now */
-  | primitive_type TIMES { Ast.PointerTo $1 }
-  | CONST primitive_type TIMES { Ast.PointerTo $2 } /* Ignore const for now */
 ;
 
-/* Kind of an odd production, it returns a function that should be applied to
+/* Kind of odd productions, they return a function that should be applied to
    the ctype in order to yield the modified ctype. */
+prefix_ctype_modifiers
+  : TIMES { fun typ -> Ast.PointerTo typ }
+  | TIMES prefix_ctype_modifiers { fun typ -> Ast.PointerTo ($2 typ) }
+;
+
 postfix_ctype_modifiers
   : LBRACKET LITERAL_INT RBRACKET { fun typ -> Ast.ArrayOf (typ, $2) }
   | LBRACKET LITERAL_INT RBRACKET postfix_ctype_modifiers { fun typ -> Ast.ArrayOf ($4 typ, $2) }
+;
 
 primitive_type
   : VOID { Ast.Void }
@@ -138,6 +147,8 @@ p1_expr
 
 p2_expr
   : p1_expr { $1 }
+  | TIMES p2_expr { Ast.Deref $2 }
+  | AMPERSAND p2_expr { Ast.UnaryOp (Ast.AddressOf, $2) }
   | PLUSPLUS p2_expr { Ast.UnaryOp (Ast.PreInc, $2) }
   | MINUSMINUS p2_expr { Ast.UnaryOp (Ast.PreDec, $2) }
   | MINUS p2_expr { Ast.UnaryOp (Ast.Neg, $2) }
@@ -176,7 +187,7 @@ p7_expr
   | p7_expr NOTEQUAL p6_expr { Ast.BinOp (Ast.CompNEQ, $1, $3) }
 ;
 
-p8_expr : p7_expr { $1 } | p8_expr BITAND p7_expr { Ast.BinOp (Ast.BitAnd, $1, $3) };
+p8_expr : p7_expr { $1 } | p8_expr AMPERSAND p7_expr { Ast.BinOp (Ast.BitAnd, $1, $3) };
 p9_expr : p8_expr { $1 } | p9_expr BITXOR p8_expr { Ast.BinOp (Ast.BitXor, $1, $3) };
 p10_expr : p9_expr { $1 } | p10_expr BITOR  p9_expr { Ast.BinOp (Ast.BitOr, $1, $3) };
 p11_expr : p10_expr { $1 } | p11_expr LOGICALAND p10_expr { Ast.LogicalAnd ($1, $3) };

@@ -33,7 +33,7 @@ rule token = parse
   | ">="           { GREATERTHANEQUAL }
   | "=="           { EQUALEQUAL }
   | "!="           { NOTEQUAL }
-  | '&'            { BITAND }
+  | '&'            { AMPERSAND }
   | '^'            { BITXOR }
   | '|'            { BITOR }
   | "&&"           { LOGICALAND }

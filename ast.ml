@@ -39,6 +39,7 @@ type unaryop =
     | LogicalNot
     | BitNot
     | Neg
+    | AddressOf
 
 type decl =
     | Function of ctype * string * (ctype * string) list * stmt
@@ -58,6 +59,7 @@ and expr =
     | Assign of expr * expr
     | VarRef of string
     | Subscript of expr * expr
+    | Deref of expr
     | BinOp of binop * expr * expr
     | UnaryOp of unaryop * expr
     | Conditional of expr * expr * expr (* "ternary" operator *)

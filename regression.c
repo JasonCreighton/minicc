@@ -81,6 +81,24 @@ void test_arrays() {
     }
 }
 
+void test_pointers() {
+    int x = 42;
+    int y = 100;
+    int *ptr;
+
+    begin_test("test_pointers");
+
+    ptr = &x;
+
+    printf("x=%d, y=%d, *ptr=%d\n", x, y, *ptr);
+    *ptr = 50;
+    printf("x=%d, y=%d, *ptr=%d\n", x, y, *ptr);
+    ptr = &y;
+    printf("x=%d, y=%d, *ptr=%d\n", x, y, *ptr);
+    *ptr = 500;
+    printf("x=%d, y=%d, *ptr=%d\n", x, y, *ptr);
+}
+
 int main() {
     unsigned char w;
     short x = 42;
@@ -132,6 +150,7 @@ int main() {
     test_nested_calls();
     test_signed_integer_operations();
     test_arrays();
+    test_pointers();
 
     return 0;
 }

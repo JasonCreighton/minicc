@@ -132,6 +132,10 @@ let emit_func func_table lit_table params body =
             asm "lea rax, [rbx + rax]";
             elem_ctype
         end
+        | Deref addr_expr ->
+            let PointerTo ctype = load_address_of_lvalue addr_expr in
+            asm "mov rax, [rax]";
+            ctype
         | _ -> raise (Compile_error "expr is not an lvalue")
     and assign_var v expr =
         let _, ctype = find_var_loc v in
@@ -141,7 +145,7 @@ let emit_func func_table lit_table params body =
     and inc_or_dec yield_old_value inst_name expr =
         match expr with
         | VarRef v -> begin
-            load_var_to_accumulator v |> ignore;
+            let ctype = load_var_to_accumulator v in
 
             if yield_old_value then asm "mov rcx, rax";
 
@@ -149,6 +153,8 @@ let emit_func func_table lit_table params body =
             store_accumulator_to_var v;
 
             if yield_old_value then asm "mov rax, rcx";
+
+            ctype
         end
         | Subscript (_, _) -> failwith "TODO: Implement array inc/dec"
         (* TODO: This is a ugly way to clear the fragile pattern match warning *)
@@ -216,6 +222,7 @@ let emit_func func_table lit_table params body =
             asmf "mov %s, [rax]" (acc_reg_name elem_ctype); (* FIXME: Seems like I should have to deal with sign extension here? *)
             elem_ctype
         end
+        | Deref e -> let PointerTo ctype = emit_expr e in asmf "mov %s, [rax]" (acc_reg_name ctype); ctype
         | BinOp (op, e1, e2) -> begin
             let materialize_comparison condition_code =
                 asm "cmp rax, rcx";
@@ -250,16 +257,14 @@ let emit_func func_table lit_table params body =
 
         end
         | UnaryOp (op, e) -> begin
-            (
             match op with
             | PreInc -> inc_or_dec false "inc" e
             | PreDec -> inc_or_dec false "dec" e
             | PostInc -> inc_or_dec true "inc" e
             | PostDec -> inc_or_dec true "dec" e
-            | BitNot | LogicalNot -> emit_expr e |> ignore; asm "not rax"
-            | Neg -> emit_expr e |> ignore; asm "neg rax"
-            );
-            Signed Long (* FIXME: Should not hardcode *)
+            | BitNot | LogicalNot -> let ctype = emit_expr e in asm "not rax"; ctype
+            | Neg -> let ctype = emit_expr e in asm "neg rax"; ctype
+            | AddressOf -> PointerTo (load_address_of_lvalue e)
         end
         | Conditional (cond, true_expr, false_expr) -> begin
             (* FIXME: Basically identical to IfElseStmt, except with expr instead of stmt *)
