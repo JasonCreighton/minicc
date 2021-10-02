@@ -6,7 +6,7 @@ MAKEFLAGS += --no-builtin-rules
 # handle nicely for some reason.
 _MKDIRS := $(shell mkdir -p build)
 
-SOURCES = ast.ml amd64.ml parser.mli parser.ml lexer.ml tests.ml main.ml
+SOURCES = ir.ml ast.ml amd64.ml parser.mli parser.ml lexer.ml tests.ml main.ml
 BUILD_SOURCES = $(addprefix build/,$(SOURCES))
 
 .PHONY: all clean test test_ocaml test_regression
