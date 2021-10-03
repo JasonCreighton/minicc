@@ -1,4 +1,4 @@
-type var_id = int
+type local_id = int
 type label_id = int
 
 type datatype =
@@ -36,18 +36,27 @@ type expr =
     | BinOp of binop * expr * expr
     | UnaryOp of unaryop * expr
     | ConstInt of int64
+    | ConstStringAddr of string
     | Load of datatype * expr
-    | Var of var_id
-    | VarAddr of var_id
+    | LocalAddr of local_id
 
 type inst =
-    | SetVar of var_id * expr
-    | Call of var_id * string * expr list
+    | Call of local_id * string * expr list
     | Store of datatype * expr * expr
     | Label of label_id
     | Jump of label_id
     | JumpIf of label_id * expr
     | Return of expr
+
+type local_def = {
+    size : int;
+    alignment : int;
+}
+
+type func = {    
+    insts : inst list;
+    locals : (local_id * local_def) list;
+}
 
 let eval_unaryop op x =
     match op with
@@ -74,7 +83,7 @@ let eval_binop op x y =
 
 let rec normalize e =
     match e with
-    | ConstInt _ | Var _ | VarAddr _ -> e (* Already normalized *)
+    | ConstInt _ | ConstStringAddr _ | LocalAddr _ -> e (* Already normalized *)
     | UnaryOp (op, nonnormal_expr) -> begin
         let e1 = normalize nonnormal_expr in
         match op, e1 with
@@ -101,8 +110,8 @@ let rec normalize e =
 let tests () =
     assert ((normalize (BinOp (Add, ConstInt 2L, ConstInt 2L))) = ConstInt 4L);
     assert ((normalize (BinOp (Mul, ConstInt 5L, ConstInt 6L))) = ConstInt 30L);
-    assert ((normalize (BinOp (And, ConstInt 10L, Var 0))) = (BinOp (And, Var 0, ConstInt 10L)));
-    assert ((normalize (UnaryOp (Neg, UnaryOp (Neg, Var 0)))) = Var 0);
-    assert ((normalize (UnaryOp (Not, UnaryOp (Not, Var 0)))) = Var 0);
+    assert ((normalize (BinOp (And, ConstInt 10L, LocalAddr 0))) = (BinOp (And, LocalAddr 0, ConstInt 10L)));
+    assert ((normalize (UnaryOp (Neg, UnaryOp (Neg, LocalAddr 0)))) = LocalAddr 0);
+    assert ((normalize (UnaryOp (Not, UnaryOp (Not, LocalAddr 0)))) = LocalAddr 0);
     assert ((normalize (UnaryOp (Neg, ConstInt 3L))) = ConstInt (-3L));
     assert ((normalize (BinOp (Add, (BinOp (Add, UnaryOp (Neg, ConstInt 2L), ConstInt 5L)), ConstInt 10L))) = ConstInt 13L);
