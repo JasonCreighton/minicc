@@ -92,15 +92,15 @@ let rec sizeof ctype =
 
 let ir_datatype_for_ctype ctype =
     match ctype with
-    | Signed Char -> Ir.Int8
-    | Unsigned Char -> Ir.UInt8
-    | Signed Short -> Ir.Int16
-    | Unsigned Short -> Ir.UInt16
-    | Signed Int -> Ir.Int32
-    | Unsigned Int -> Ir.UInt32
-    | Signed Long -> Ir.Int64
-    | Unsigned Long -> Ir.UInt64
-    | PointerTo _ -> Ir.UInt64
+    | Signed Char -> Ir.MemI8
+    | Unsigned Char -> Ir.MemU8
+    | Signed Short -> Ir.MemI16
+    | Unsigned Short -> Ir.MemU16
+    | Signed Int -> Ir.MemI32
+    | Unsigned Int -> Ir.MemU32
+    | Signed Long -> Ir.MemI64
+    | Unsigned Long -> Ir.MemU64
+    | PointerTo _ -> Ir.MemU64
 
 let func_to_ir func_name func_params func_body =
     let locals = ref [] in
@@ -191,13 +191,13 @@ let func_to_ir func_name func_params func_body =
         let result_local_id = new_local (Unsigned Char) in
         let short_circuit_label_id = new_label () in
         let e1_ctype, e1_ir = emit_expr e1 in
-        add_inst @@ Ir.Store (UInt8, Ir.LocalAddr result_local_id, Ir.UnaryOp (Ir.Not, Ir.BinOp (Ir.CompEQ, e1_ir, ConstInt 0L)));
-        add_inst @@ Ir.JumpIf (short_circuit_label_id, Ir.BinOp (Ir.CompEQ, Ir.Load(UInt8, Ir.LocalAddr result_local_id), ConstInt (if short_circuit_condition then 1L else 0L)));
+        add_inst @@ Ir.Store (MemU8, Ir.LocalAddr result_local_id, Ir.UnaryOp (Ir.Not, Ir.BinOp (Ir.CompEQ, e1_ir, ConstInt 0L)));
+        add_inst @@ Ir.JumpIf (short_circuit_label_id, Ir.BinOp (Ir.CompEQ, Ir.Load(MemU8, Ir.LocalAddr result_local_id), ConstInt (if short_circuit_condition then 1L else 0L)));
         let e2_ctype, e2_ir = emit_expr e2 in
-        add_inst @@ Ir.Store (UInt8, Ir.LocalAddr result_local_id, Ir.UnaryOp (Ir.Not, Ir.BinOp (Ir.CompEQ, e2_ir, ConstInt 0L)));
+        add_inst @@ Ir.Store (MemU8, Ir.LocalAddr result_local_id, Ir.UnaryOp (Ir.Not, Ir.BinOp (Ir.CompEQ, e2_ir, ConstInt 0L)));
         add_inst @@ Ir.Label short_circuit_label_id;
 
-        (Unsigned Char, Ir.Load (UInt8, Ir.LocalAddr result_local_id))
+        (Unsigned Char, Ir.Load (MemU8, Ir.LocalAddr result_local_id))
     end
     and emit_stmt stmt =
         match stmt with
@@ -304,7 +304,7 @@ let func_to_ir func_name func_params func_body =
                 let evaluated_args = List.map (fun e -> emit_expr e |> snd) args in
                 add_inst @@ Ir.Call (result_local_id, func_name, evaluated_args);
 
-                (Signed Long, Ir.Load (Ir.UInt64, Ir.LocalAddr result_local_id)) (* FIXME: Don't hardcode type *)
+                (Signed Long, Ir.Load (Ir.MemU64, Ir.LocalAddr result_local_id)) (* FIXME: Don't hardcode type *)
             end
     in
 

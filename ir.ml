@@ -1,15 +1,21 @@
 type local_id = int
 type label_id = int
 
-type datatype =
-    | UInt8
-    | Int8
-    | UInt16
-    | Int16
-    | UInt32
-    | Int32
-    | UInt64
-    | Int64
+(* Loads and stores can be different widths *)
+type memtype =
+    | MemU8
+    | MemI8
+    | MemU16
+    | MemI16
+    | MemU32
+    | MemI32
+    | MemU64
+    | MemI64
+
+(* All expression evaluation is done at full width, and signedness is expected
+to be encoded in operator usage (eg, Div vs DivUnsigned) *)
+type evaltype =
+    | EInt
 
 type binop =
     | Add
@@ -37,12 +43,12 @@ type expr =
     | UnaryOp of unaryop * expr
     | ConstInt of int64
     | ConstStringAddr of string
-    | Load of datatype * expr
+    | Load of memtype * expr
     | LocalAddr of local_id
 
 type inst =
     | Call of local_id * string * expr list
-    | Store of datatype * expr * expr
+    | Store of memtype * expr * expr
     | Label of label_id
     | Jump of label_id
     | JumpIf of label_id * expr
