@@ -1,38 +1,34 @@
 type local_id = int
 type label_id = int
 
-(* Loads and stores can be different widths *)
-type memtype =
-    | MemU8
-    | MemI8
-    | MemU16
-    | MemI16
-    | MemU32
-    | MemI32
-    | MemU64
-    | MemI64
+exception Type_error of string
 
-(* All expression evaluation is done at full width, and signedness is expected
-to be encoded in operator usage (eg, Div vs DivUnsigned) *)
-type evaltype =
-    | EInt
+(* Every node in an expression has a datatype, either explicitly specified or
+implicited determined by its children. BinOps and UnaryOps yield a result of
+the same type of their operands, and the types of BinOp operands must match
+each other. *)
+type datatype =
+    | U8
+    | I8
+    | U16
+    | I16
+    | U32
+    | I32
+    | U64
+    | I64
 
 type binop =
     | Add
     | Mul
     | Div
-    | DivUnsigned
     | Rem
-    | RemUnsigned
     | And
     | Or
     | Xor
     | ShiftLeft
     | ShiftRight
-    | ShiftRightUnsigned
     | CompEQ
     | CompLT
-    | CompLTUnsigned
 
 type unaryop =
     | Neg
@@ -41,14 +37,15 @@ type unaryop =
 type expr =
     | BinOp of binop * expr * expr
     | UnaryOp of unaryop * expr
-    | ConstInt of int64
+    | ConvertTo of datatype * expr
+    | ConstInt of datatype * int64
     | ConstStringAddr of string
-    | Load of memtype * expr
+    | Load of datatype * expr
     | LocalAddr of local_id
 
 type inst =
     | Call of local_id * string * expr list
-    | Store of memtype * expr * expr
+    | Store of datatype * expr * expr
     | Label of label_id
     | Jump of label_id
     | JumpIf of label_id * expr
@@ -64,28 +61,60 @@ type func = {
     locals : (local_id * local_def) list;
 }
 
-let eval_unaryop op x =
-    match op with
+let zero_extend size x =
+    let mask = Int64.sub (Int64.shift_left 1L size) 1L in
+    Int64.logand x mask
+
+let sign_extend size x =
+    let shift_amount = 64 - size in
+
+    (* Put "our" sign bit in actual MSB, then shift right to replicate it in
+    the bits above "size" *)
+    Int64.shift_right (Int64.shift_left x shift_amount) shift_amount
+
+let limit_width typ x =
+    match typ with
+    | U8  -> zero_extend 8  x
+    | U16 -> zero_extend 16 x
+    | U32 -> zero_extend 32 x
+    | U64 -> zero_extend 64 x
+    | I8  -> sign_extend 8  x
+    | I16 -> sign_extend 16 x
+    | I32 -> sign_extend 32 x
+    | I64 -> sign_extend 64 x
+
+let eval_unaryop typ op x =
+    let full_width_result = match op with
     | Neg -> Int64.neg x
     | Not -> Int64.lognot x
+    in
+    limit_width typ full_width_result
 
-let eval_binop op x y =
-    match op with
+let eval_binop typ op x y =
+    let signed =
+        match typ with
+        | I8 | I16 | I32 | I64 -> true
+        | U8 | U16 | U32 | U64 -> false
+    in
+    let full_width_result = match op with
     | Add -> Int64.add x y
     | Mul -> Int64.mul x y
-    | Div -> Int64.div x y
-    | DivUnsigned -> Int64.unsigned_div x y
-    | Rem -> Int64.rem x y
-    | RemUnsigned -> Int64.unsigned_rem x y
+    | Div -> if signed then Int64.div x y else Int64.unsigned_div x y
+    | Rem -> if signed then Int64.rem x y else Int64.unsigned_rem x y
     | And -> Int64.logand x y
     | Or -> Int64.logor x y
     | Xor -> Int64.logxor x y
     | ShiftLeft -> Int64.shift_left x (Int64.to_int y)
-    | ShiftRight -> Int64.shift_right x (Int64.to_int y)
-    | ShiftRightUnsigned -> Int64.shift_right_logical x (Int64.to_int y)
+    | ShiftRight ->
+        if signed
+        then Int64.shift_right x (Int64.to_int y)
+        else Int64.shift_right_logical x (Int64.to_int y)
     | CompEQ -> if (Int64.compare x y) = 0 then 1L else 0L
-    | CompLT -> if (Int64.compare x y) < 0 then 1L else 0L
-    | CompLTUnsigned -> if (Int64.unsigned_compare x y) < 0 then 1L else 0L
+    | CompLT ->
+        let cmp = if signed then Int64.compare x y else Int64.unsigned_compare x y in
+        if cmp < 0 then 1L else 0L
+    in
+    limit_width typ full_width_result
 
 let rec normalize e =
     match e with
@@ -94,7 +123,7 @@ let rec normalize e =
         let e1 = normalize nonnormal_expr in
         match op, e1 with
         (* Fold constants *)
-        | _, ConstInt x -> ConstInt (eval_unaryop op x)
+        | _, ConstInt (typ, x) -> ConstInt (typ, eval_unaryop typ op x)
         (* Remove repeated negations or inversions *)
         | Neg, UnaryOp (Neg, e2) -> e2
         | Not, UnaryOp (Not, e2) -> e2
@@ -105,7 +134,10 @@ let rec normalize e =
         let rhs = normalize nonnormal_rhs in
         match op, lhs, rhs with
         (* Fold constants *)
-        | _, ConstInt x, ConstInt y -> ConstInt (eval_binop op x y)
+        | _, ConstInt (typ_x, x), ConstInt (typ_y, y) -> begin
+            if typ_x <> typ_y then raise (Type_error "BinOp operands have different types");
+            ConstInt (typ_x, eval_binop typ_x op x y)
+        end
         (* Put constants on RHS of communtative operators *)
         | (Add | Mul | And | Or | Xor | CompEQ), ConstInt _, _ -> BinOp (op, rhs, lhs)
         | _, _, _ -> BinOp (op, lhs, rhs)
@@ -114,10 +146,16 @@ let rec normalize e =
 
 
 let tests () =
-    assert ((normalize (BinOp (Add, ConstInt 2L, ConstInt 2L))) = ConstInt 4L);
-    assert ((normalize (BinOp (Mul, ConstInt 5L, ConstInt 6L))) = ConstInt 30L);
-    assert ((normalize (BinOp (And, ConstInt 10L, LocalAddr 0))) = (BinOp (And, LocalAddr 0, ConstInt 10L)));
+    assert ((normalize (BinOp (Add, ConstInt (I64, 2L), ConstInt (I64, 2L)))) = ConstInt (I64, 4L));
+    assert ((normalize (BinOp (Mul, ConstInt (I64, 5L), ConstInt (I64, 6L)))) = ConstInt (I64, 30L));
+    assert ((normalize (BinOp (And, ConstInt (I64, 10L), LocalAddr 0))) = (BinOp (And, LocalAddr 0, ConstInt (I64, 10L))));
     assert ((normalize (UnaryOp (Neg, UnaryOp (Neg, LocalAddr 0)))) = LocalAddr 0);
     assert ((normalize (UnaryOp (Not, UnaryOp (Not, LocalAddr 0)))) = LocalAddr 0);
-    assert ((normalize (UnaryOp (Neg, ConstInt 3L))) = ConstInt (-3L));
-    assert ((normalize (BinOp (Add, (BinOp (Add, UnaryOp (Neg, ConstInt 2L), ConstInt 5L)), ConstInt 10L))) = ConstInt 13L);
+    assert ((normalize (UnaryOp (Neg, ConstInt (I64, 3L)))) = ConstInt (I64, (-3L)));
+    assert ((normalize (BinOp (Add, (BinOp (Add, UnaryOp (Neg, ConstInt (I64, 2L)), ConstInt (I64, 5L))), ConstInt (I64, 10L)))) = ConstInt (I64, 13L));
+
+    (* Wrapping of less than full size integers *)
+    assert ((normalize (BinOp (Add, ConstInt (I8, 127L), ConstInt (I8, 1L)))) = ConstInt (I8, -128L));
+    assert ((normalize (BinOp (Add, ConstInt (U8, 255L), ConstInt (U8, 1L)))) = ConstInt (U8, 0L));
+    assert ((normalize (BinOp (Add, ConstInt (U16, 65535L), ConstInt (U16, 1L)))) = ConstInt (U16, 0L));
+    assert ((normalize (BinOp (Add, ConstInt (I32, -2147483648L), ConstInt (I32, -1L)))) = ConstInt (I32, 2147483647L));

@@ -92,15 +92,15 @@ let rec sizeof ctype =
 
 let ir_datatype_for_ctype ctype =
     match ctype with
-    | Signed Char -> Ir.MemI8
-    | Unsigned Char -> Ir.MemU8
-    | Signed Short -> Ir.MemI16
-    | Unsigned Short -> Ir.MemU16
-    | Signed Int -> Ir.MemI32
-    | Unsigned Int -> Ir.MemU32
-    | Signed Long -> Ir.MemI64
-    | Unsigned Long -> Ir.MemU64
-    | PointerTo _ -> Ir.MemU64
+    | Signed Char -> Ir.I8
+    | Unsigned Char -> Ir.U8
+    | Signed Short -> Ir.I16
+    | Unsigned Short -> Ir.U16
+    | Signed Int -> Ir.I32
+    | Unsigned Int -> Ir.U32
+    | Signed Long -> Ir.I64
+    | Unsigned Long -> Ir.U64
+    | PointerTo _ -> Ir.U64
 
 let func_to_ir func_name func_params func_body =
     let locals = ref [] in
@@ -136,7 +136,7 @@ let func_to_ir func_name func_params func_body =
         | Subscript (ary, idx) -> begin
             let (ArrayOf (elem_ctype, ary_len), addr_ir) = address_of_lvalue ary in
             let idx_ctype, idx_ir = emit_expr idx in
-            (elem_ctype, Ir.BinOp (Ir.Add, addr_ir, Ir.BinOp (Ir.Mul, idx_ir, Ir.ConstInt (Int64.of_int (sizeof elem_ctype)))))
+            (elem_ctype, Ir.BinOp (Ir.Add, addr_ir, Ir.BinOp (Ir.Mul, idx_ir, Ir.ConstInt (Ir.U64, Int64.of_int (sizeof elem_ctype)))))
         end
         | Deref addr_expr ->
             let (PointerTo ctype, addr_ir) = address_of_lvalue addr_expr in
@@ -148,7 +148,6 @@ let func_to_ir func_name func_params func_body =
         let ir_datatype = ir_datatype_for_ctype ctype in
         add_inst @@ Ir.Store (ir_datatype, Ir.LocalAddr local_id, expr_ir);
         (ctype, Ir.Load (ir_datatype, Ir.LocalAddr local_id))
-    and foobar yield_old_value delta expr = (Signed Long, Ir.ConstInt 0L)
     and inc_or_dec yield_old_value delta expr =
         match expr with
         | VarRef v -> begin
@@ -156,13 +155,13 @@ let func_to_ir func_name func_params func_body =
             let ir_datatype = ir_datatype_for_ctype ctype in
 
             (* Always pre-increment *)
-            add_inst @@ Ir.Store (ir_datatype, Ir.LocalAddr local_id, Ir.BinOp (Ir.Add, Ir.Load (ir_datatype, Ir.LocalAddr local_id), Ir.ConstInt (Int64.of_int delta)));
+            add_inst @@ Ir.Store (ir_datatype, Ir.LocalAddr local_id, Ir.BinOp (Ir.Add, Ir.Load (ir_datatype, Ir.LocalAddr local_id), Ir.ConstInt (ir_datatype, Int64.of_int delta)));
 
             (* FIXME: For post-increment, rather than doing the increment at
             the appropriate time, we just add/subtract the appropriate amount
             to recover the original value. *)
             let adj = if yield_old_value then -delta else 0 in
-            (ctype, Ir.BinOp (Ir.Add, (Ir.Load (ir_datatype, Ir.LocalAddr local_id)), Ir.ConstInt (Int64.of_int adj)))
+            (ctype, Ir.BinOp (Ir.Add, (Ir.Load (ir_datatype, Ir.LocalAddr local_id)), Ir.ConstInt (ir_datatype, Int64.of_int adj)))
         end
         | Subscript (_, _) -> failwith "TODO: Implement array inc/dec"
         (* TODO: This is a ugly way to clear the fragile pattern match warning *)
@@ -191,13 +190,13 @@ let func_to_ir func_name func_params func_body =
         let result_local_id = new_local (Unsigned Char) in
         let short_circuit_label_id = new_label () in
         let e1_ctype, e1_ir = emit_expr e1 in
-        add_inst @@ Ir.Store (MemU8, Ir.LocalAddr result_local_id, Ir.UnaryOp (Ir.Not, Ir.BinOp (Ir.CompEQ, e1_ir, ConstInt 0L)));
-        add_inst @@ Ir.JumpIf (short_circuit_label_id, Ir.BinOp (Ir.CompEQ, Ir.Load(MemU8, Ir.LocalAddr result_local_id), ConstInt (if short_circuit_condition then 1L else 0L)));
+        add_inst @@ Ir.Store (Ir.U8, Ir.LocalAddr result_local_id, Ir.UnaryOp (Ir.Not, Ir.BinOp (Ir.CompEQ, e1_ir, ConstInt (ir_datatype_for_ctype e1_ctype, 0L))));
+        add_inst @@ Ir.JumpIf (short_circuit_label_id, Ir.BinOp (Ir.CompEQ, Ir.Load(Ir.U8, Ir.LocalAddr result_local_id), ConstInt (Ir.U8, if short_circuit_condition then 1L else 0L)));
         let e2_ctype, e2_ir = emit_expr e2 in
-        add_inst @@ Ir.Store (MemU8, Ir.LocalAddr result_local_id, Ir.UnaryOp (Ir.Not, Ir.BinOp (Ir.CompEQ, e2_ir, ConstInt 0L)));
+        add_inst @@ Ir.Store (Ir.U8, Ir.LocalAddr result_local_id, Ir.UnaryOp (Ir.Not, Ir.BinOp (Ir.CompEQ, e2_ir, ConstInt (ir_datatype_for_ctype e2_ctype, 0L))));
         add_inst @@ Ir.Label short_circuit_label_id;
 
-        (Unsigned Char, Ir.Load (MemU8, Ir.LocalAddr result_local_id))
+        (Unsigned Char, Ir.Load (Ir.U8, Ir.LocalAddr result_local_id))
     end
     and emit_stmt stmt =
         match stmt with
@@ -221,13 +220,13 @@ let func_to_ir func_name func_params func_body =
         | ReturnStmt expr_opt ->
             (* TODO: IR doesn't support return without a value *)
             let expr_ir = match expr_opt with
-                | None -> Ir.ConstInt 0L
+                | None -> Ir.ConstInt (Ir.I64, 0L) (* FIXME: Don't hardcode type *)
                 | Some e -> emit_expr e |> snd
             in
             add_inst @@ Ir.Return expr_ir
     and emit_expr expr =
         match expr with
-        | Lit n -> (Signed Long, Ir.ConstInt (Int64.of_int n))
+        | Lit n -> (Signed Long, Ir.ConstInt (Ir.I64, Int64.of_int n))
         | LitString s -> (PointerTo (Unsigned Char), Ir.ConstStringAddr s)
         | Assign (VarRef v, rhs) -> assign_var v rhs
         | Assign (lvalue, rhs) -> begin
@@ -304,7 +303,7 @@ let func_to_ir func_name func_params func_body =
                 let evaluated_args = List.map (fun e -> emit_expr e |> snd) args in
                 add_inst @@ Ir.Call (result_local_id, func_name, evaluated_args);
 
-                (Signed Long, Ir.Load (Ir.MemU64, Ir.LocalAddr result_local_id)) (* FIXME: Don't hardcode type *)
+                (Signed Long, Ir.Load (Ir.U64, Ir.LocalAddr result_local_id)) (* FIXME: Don't hardcode type *)
             end
     in
 
