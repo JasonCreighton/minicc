@@ -44,12 +44,12 @@ type expr =
     | LocalAddr of local_id
 
 type inst =
-    | Call of local_id * string * expr list
     | Store of datatype * expr * expr
+    | Call of (datatype * local_id) option * string * expr list
     | Label of label_id
     | Jump of label_id
     | JumpIf of label_id * expr
-    | Return of expr
+    | Return of expr option
 
 type local_def = {
     size : int;
@@ -71,6 +71,13 @@ let rec type_of expr =
     | UnaryOp (_, e) -> type_of e
     | ConstInt (typ, _) | Load (typ, _) | ConvertTo (typ, _) -> typ
     | ConstStringAddr _ | LocalAddr _ -> U64
+
+let size_of typ =
+    match typ with
+    | U8  | I8  -> 8
+    | U16 | I16 -> 16
+    | U32 | I32 -> 32
+    | U64 | I64 -> 64
 
 let sub x y = BinOp (Add, x, UnaryOp (Neg, y))
 let logical_not x = BinOp (CompEQ, x, ConstInt (type_of x, 0L))

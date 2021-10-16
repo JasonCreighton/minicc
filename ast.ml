@@ -102,7 +102,7 @@ let ir_datatype_for_ctype ctype =
     | Unsigned Long -> Ir.U64
     | PointerTo _ -> Ir.U64
 
-let func_to_ir func_name func_params func_body =
+let func_to_ir ret_ctype func_name func_params func_body =
     let locals = ref [] in
     let insts = ref [] in
     let var_table = Hashtbl.create 100 in
@@ -218,12 +218,7 @@ let func_to_ir func_name func_params func_body =
         | WhileStmt (cond, body) -> emit_loop Option.none cond Option.none body
         | ForStmt (init, cond, incr, body) -> emit_loop (Option.some init) cond (Option.some incr) body
         | ReturnStmt expr_opt ->
-            (* TODO: IR doesn't support return without a value *)
-            let expr_ir = match expr_opt with
-                | None -> Ir.ConstInt (Ir.I64, 0L) (* FIXME: Don't hardcode type *)
-                | Some e -> emit_expr e |> snd
-            in
-            add_inst @@ Ir.Return expr_ir
+            add_inst @@ Ir.Return (Option.map (fun e -> emit_expr e |> snd) expr_opt)
     and emit_expr expr =
         match expr with
         | Lit n -> (Signed Long, Ir.ConstInt (Ir.I64, Int64.of_int n))
@@ -302,10 +297,23 @@ let func_to_ir func_name func_params func_body =
             begin
                 let result_local_id = new_local (Signed Long) in (* FIXME: Don't hardcode type *)
                 let evaluated_args = List.map (fun e -> emit_expr e |> snd) args in
-                add_inst @@ Ir.Call (result_local_id, func_name, evaluated_args);
+                add_inst @@ Ir.Call (Some (Ir.U64, result_local_id), func_name, evaluated_args);
 
                 (Signed Long, Ir.Load (Ir.U64, Ir.LocalAddr result_local_id)) (* FIXME: Don't hardcode type *)
             end
     in
+    (* Put arguments into var_table *)
+    List.iteri (fun i (ctype, arg_name) -> Hashtbl.add var_table arg_name (-i, ctype)) func_params;
 
+    emit_stmt func_body;
     { Ir.insts = !insts; Ir.locals = !locals; }
+
+let build_func_table decl_list =
+    let func_table = Hashtbl.create 64 in
+    List.iter (fun d ->
+        match d with
+        | Function (ret_ctype, name, params, body) -> Hashtbl.add func_table name (func_to_ir ret_ctype name params body)
+        | FunctionDecl _ -> ()
+    ) decl_list;
+
+    func_table
