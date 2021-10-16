@@ -61,6 +61,20 @@ type func = {
     locals : (local_id * local_def) list;
 }
 
+let rec type_of expr =
+    match expr with
+    | BinOp (_, lhs, rhs) -> begin
+        let lhs_t = type_of lhs in
+        assert (lhs_t = (type_of rhs));
+        lhs_t
+    end
+    | UnaryOp (_, e) -> type_of e
+    | ConstInt (typ, _) | Load (typ, _) | ConvertTo (typ, _) -> typ
+    | ConstStringAddr _ | LocalAddr _ -> U64
+
+let sub x y = BinOp (Add, x, UnaryOp (Neg, y))
+let logical_not x = BinOp (CompEQ, x, ConstInt (type_of x, 0L))
+
 let zero_extend size x =
     let mask = Int64.sub (Int64.shift_left 1L size) 1L in
     Int64.logand x mask

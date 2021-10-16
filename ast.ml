@@ -175,7 +175,7 @@ let func_to_ir func_name func_params func_body =
         (* Loop test *)
         add_inst @@ Ir.Label test_label_id;
         let _, cond_ir = emit_expr cond in
-        add_inst @@ Ir.JumpIf (end_label_id, Ir.UnaryOp (Ir.Not, cond_ir));
+        add_inst @@ Ir.JumpIf (end_label_id, Ir.logical_not cond_ir);
 
         (* Loop body *)
         emit_stmt body;
@@ -190,10 +190,10 @@ let func_to_ir func_name func_params func_body =
         let result_local_id = new_local (Unsigned Char) in
         let short_circuit_label_id = new_label () in
         let e1_ctype, e1_ir = emit_expr e1 in
-        add_inst @@ Ir.Store (Ir.U8, Ir.LocalAddr result_local_id, Ir.UnaryOp (Ir.Not, Ir.BinOp (Ir.CompEQ, e1_ir, ConstInt (ir_datatype_for_ctype e1_ctype, 0L))));
+        add_inst @@ Ir.Store (Ir.U8, Ir.LocalAddr result_local_id, Ir.logical_not (Ir.BinOp (Ir.CompEQ, e1_ir, ConstInt (ir_datatype_for_ctype e1_ctype, 0L))));
         add_inst @@ Ir.JumpIf (short_circuit_label_id, Ir.BinOp (Ir.CompEQ, Ir.Load(Ir.U8, Ir.LocalAddr result_local_id), ConstInt (Ir.U8, if short_circuit_condition then 1L else 0L)));
         let e2_ctype, e2_ir = emit_expr e2 in
-        add_inst @@ Ir.Store (Ir.U8, Ir.LocalAddr result_local_id, Ir.UnaryOp (Ir.Not, Ir.BinOp (Ir.CompEQ, e2_ir, ConstInt (ir_datatype_for_ctype e2_ctype, 0L))));
+        add_inst @@ Ir.Store (Ir.U8, Ir.LocalAddr result_local_id, Ir.logical_not (Ir.BinOp (Ir.CompEQ, e2_ir, ConstInt (ir_datatype_for_ctype e2_ctype, 0L))));
         add_inst @@ Ir.Label short_circuit_label_id;
 
         (Unsigned Char, Ir.Load (Ir.U8, Ir.LocalAddr result_local_id))
@@ -208,7 +208,7 @@ let func_to_ir func_name func_params func_body =
             let else_label_id = new_label () in
             let done_label_id = new_label () in
             let ctype, cond_ir = emit_expr cond in
-            add_inst @@ Ir.JumpIf (else_label_id, Ir.UnaryOp (Ir.Not, cond_ir));
+            add_inst @@ Ir.JumpIf (else_label_id, Ir.logical_not cond_ir);
             emit_stmt then_stmt;
             add_inst @@ Ir.Jump done_label_id;
             add_inst @@ Ir.Label else_label_id;
@@ -249,7 +249,7 @@ let func_to_ir func_name func_params func_body =
             (* FIXME: Handle unsigned cases properly *)
             let result_ir = match op with
             | Add -> Ir.BinOp (Ir.Add, e1_ir, e2_ir)
-            | Sub -> Ir.BinOp (Ir.Add, e1_ir, Ir.UnaryOp (Ir.Neg, e2_ir))
+            | Sub -> Ir.sub e1_ir e2_ir
             | Mul -> Ir.BinOp (Ir.Mul, e1_ir, e2_ir)
             | Div -> Ir.BinOp (Ir.Div, e1_ir, e2_ir)
             | Rem -> Ir.BinOp (Ir.Rem, e1_ir, e2_ir)
@@ -259,11 +259,11 @@ let func_to_ir func_name func_params func_body =
             | BitShiftLeft -> Ir.BinOp (Ir.ShiftLeft, e1_ir, e2_ir)
             | BitShiftRight -> Ir.BinOp (Ir.ShiftRight, e1_ir, e2_ir)
             | CompEQ -> Ir.BinOp (Ir.CompEQ, e1_ir, e2_ir)
-            | CompNEQ -> Ir.UnaryOp (Ir.Not, Ir.BinOp (Ir.CompEQ, e1_ir, e2_ir))
+            | CompNEQ -> Ir.logical_not (Ir.BinOp (Ir.CompEQ, e1_ir, e2_ir))
             | CompLT -> Ir.BinOp (Ir.CompLT, e1_ir, e2_ir)
             | CompGT -> Ir.BinOp (Ir.CompLT, e2_ir, e1_ir)
-            | CompLTE -> Ir.UnaryOp (Ir.Not, Ir.BinOp (Ir.CompLT, e2_ir, e1_ir))
-            | CompGTE -> Ir.UnaryOp (Ir.Not, Ir.BinOp (Ir.CompLT, e1_ir, e2_ir))
+            | CompLTE -> Ir.logical_not (Ir.BinOp (Ir.CompLT, e2_ir, e1_ir))
+            | CompGTE -> Ir.logical_not (Ir.BinOp (Ir.CompLT, e1_ir, e2_ir))
             in
 
             (Signed Long, result_ir) (* FIXME: Should not hardcode type *)
@@ -275,15 +275,16 @@ let func_to_ir func_name func_params func_body =
             | PreDec -> inc_or_dec false (-1) e
             | PostInc -> inc_or_dec true 1 e
             | PostDec -> inc_or_dec true (-1) e
-            | BitNot | LogicalNot -> let ctype, e_ir = emit_expr e in (ctype, Ir.UnaryOp (Ir.Not, e_ir))
-            | Neg -> let ctype, e_ir = emit_expr e in (ctype, Ir.UnaryOp (Ir.Not, e_ir))
+            | BitNot -> let ctype, e_ir = emit_expr e in (ctype, Ir.UnaryOp (Not, e_ir))
+            | LogicalNot -> let ctype, e_ir = emit_expr e in (ctype, Ir.logical_not e_ir)
+            | Neg -> let ctype, e_ir = emit_expr e in (ctype, Ir.UnaryOp (Neg, e_ir))
             | AddressOf -> let ctype, e_ir = address_of_lvalue e in (PointerTo ctype, e_ir)
         end
         | Conditional (cond, true_expr, false_expr) -> begin
             let else_label_id = new_label () in
             let done_label_id = new_label () in
             let cond_ctype, cond_ir = emit_expr cond in
-            add_inst @@ Ir.JumpIf (else_label_id, Ir.UnaryOp (Ir.Not, cond_ir));
+            add_inst @@ Ir.JumpIf (else_label_id, Ir.logical_not cond_ir);
             let true_ctype, true_ir = emit_expr true_expr in
             let result_local_id = new_local true_ctype in
             add_inst @@ Ir.Store (ir_datatype_for_ctype true_ctype, Ir.LocalAddr result_local_id, true_ir);
