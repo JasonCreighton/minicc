@@ -34,7 +34,7 @@ build/bytecode_minicc: $(BUILD_SOURCES)
 	ocamlc -g -o build/bytecode_minicc -I build $(BUILD_SOURCES)
 
 build/regression.asm: build/minicc regression.c
-	./build/minicc < regression.c > build/regression.asm	
+	./build/minicc -i regression.c -o build/regression.asm	
 
 build/regression.o: build/regression.asm
 	nasm -felf64 build/regression.asm
