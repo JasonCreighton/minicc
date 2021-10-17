@@ -9,7 +9,7 @@ _MKDIRS := $(shell mkdir -p build)
 SOURCES = ir.ml ast.ml amd64.ml parser.mli parser.ml lexer.ml tests.ml main.ml
 BUILD_SOURCES = $(addprefix build/,$(SOURCES))
 
-.PHONY: all clean test test_ocaml test_regression
+.PHONY: all debug clean test test_ocaml test_regression
 
 all: test
 
@@ -58,3 +58,6 @@ test_ocaml: build/minicc
 	./build/minicc -runtests
 
 test: test_ocaml test_regression
+
+debug: build/bytecode_minicc
+	rlwrap ocamldebug ./build/bytecode_minicc -i regression.c -o build/regression.asm
