@@ -19,6 +19,7 @@ type datatype =
 
 type binop =
     | Add
+    | Sub
     | Mul
     | Div
     | Rem
@@ -28,11 +29,16 @@ type binop =
     | ShiftLeft
     | ShiftRight
     | CompEQ
+    | CompNEQ
     | CompLT
+    | CompLTE
+    | CompGT
+    | CompGTE
 
 type unaryop =
     | Neg
     | Not
+    | LogicalNot
 
 type expr =
     | BinOp of binop * expr * expr
@@ -79,8 +85,7 @@ let size_of typ =
     | U32 | I32 -> 32
     | U64 | I64 -> 64
 
-let sub x y = BinOp (Add, x, UnaryOp (Neg, y))
-let logical_not x = BinOp (CompEQ, x, ConstInt (type_of x, 0L))
+let logical_not x = UnaryOp (LogicalNot, x)
 
 let zero_extend size x =
     let mask = Int64.sub (Int64.shift_left 1L size) 1L in
@@ -111,14 +116,18 @@ let eval_unaryop typ op x =
     in
     limit_width typ full_width_result
 
+let int64_of_bool b = if b then 1L else 0L
+
 let eval_binop typ op x y =
     let signed =
         match typ with
         | I8 | I16 | I32 | I64 -> true
         | U8 | U16 | U32 | U64 -> false
     in
+    let cmp = if signed then Int64.compare x y else Int64.unsigned_compare x y in
     let full_width_result = match op with
     | Add -> Int64.add x y
+    | Sub -> Int64.sub x y
     | Mul -> Int64.mul x y
     | Div -> if signed then Int64.div x y else Int64.unsigned_div x y
     | Rem -> if signed then Int64.rem x y else Int64.unsigned_rem x y
@@ -130,10 +139,12 @@ let eval_binop typ op x y =
         if signed
         then Int64.shift_right x (Int64.to_int y)
         else Int64.shift_right_logical x (Int64.to_int y)
-    | CompEQ -> if (Int64.compare x y) = 0 then 1L else 0L
-    | CompLT ->
-        let cmp = if signed then Int64.compare x y else Int64.unsigned_compare x y in
-        if cmp < 0 then 1L else 0L
+    | CompEQ -> int64_of_bool (cmp = 0)
+    | CompNEQ -> int64_of_bool (cmp <> 0)
+    | CompLT -> int64_of_bool (cmp < 0)
+    | CompLTE -> int64_of_bool (cmp <= 0)
+    | CompGT -> int64_of_bool (cmp > 0)
+    | CompGTE -> int64_of_bool (cmp >= 0)
     in
     limit_width typ full_width_result
 
@@ -160,7 +171,7 @@ let rec normalize e =
             ConstInt (typ_x, eval_binop typ_x op x y)
         end
         (* Put constants on RHS of communtative operators *)
-        | (Add | Mul | And | Or | Xor | CompEQ), ConstInt _, _ -> BinOp (op, rhs, lhs)
+        | (Add | Mul | And | Or | Xor | CompEQ | CompNEQ), ConstInt _, _ -> BinOp (op, rhs, lhs)
         | _, _, _ -> BinOp (op, lhs, rhs)
     end
     | Load (typ, nonnormal_expr) -> Load (typ, normalize nonnormal_expr)

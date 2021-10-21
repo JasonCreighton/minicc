@@ -244,7 +244,7 @@ let func_to_ir ret_ctype func_name func_params func_body =
             (* FIXME: Handle unsigned cases properly *)
             let result_ir = match op with
             | Add -> Ir.BinOp (Ir.Add, e1_ir, e2_ir)
-            | Sub -> Ir.sub e1_ir e2_ir
+            | Sub -> Ir.BinOp (Ir.Sub, e1_ir, e2_ir)
             | Mul -> Ir.BinOp (Ir.Mul, e1_ir, e2_ir)
             | Div -> Ir.BinOp (Ir.Div, e1_ir, e2_ir)
             | Rem -> Ir.BinOp (Ir.Rem, e1_ir, e2_ir)
@@ -254,11 +254,11 @@ let func_to_ir ret_ctype func_name func_params func_body =
             | BitShiftLeft -> Ir.BinOp (Ir.ShiftLeft, e1_ir, e2_ir)
             | BitShiftRight -> Ir.BinOp (Ir.ShiftRight, e1_ir, e2_ir)
             | CompEQ -> Ir.BinOp (Ir.CompEQ, e1_ir, e2_ir)
-            | CompNEQ -> Ir.logical_not (Ir.BinOp (Ir.CompEQ, e1_ir, e2_ir))
+            | CompNEQ -> Ir.BinOp (Ir.CompNEQ, e1_ir, e2_ir)
             | CompLT -> Ir.BinOp (Ir.CompLT, e1_ir, e2_ir)
-            | CompGT -> Ir.BinOp (Ir.CompLT, e2_ir, e1_ir)
-            | CompLTE -> Ir.logical_not (Ir.BinOp (Ir.CompLT, e2_ir, e1_ir))
-            | CompGTE -> Ir.logical_not (Ir.BinOp (Ir.CompLT, e1_ir, e2_ir))
+            | CompGT -> Ir.BinOp (Ir.CompGT, e1_ir, e2_ir)
+            | CompLTE -> Ir.BinOp (Ir.CompLTE, e1_ir, e2_ir)
+            | CompGTE -> Ir.BinOp (Ir.CompGTE, e1_ir, e2_ir)
             in
 
             (Signed Long, result_ir) (* FIXME: Should not hardcode type *)
