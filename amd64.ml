@@ -48,7 +48,6 @@ let emit_func func_table lit_table ir_func =
         Buffer.add_char out_buffer '\t';
         kbprintf (fun b -> Buffer.add_char b '\n') out_buffer fmt
     in
-    let asm_rawf fmt = bprintf out_buffer fmt in
     let asm str = asmf "%s" str in
     let find_local_offset local_id =
         (* HACK: Negative local IDs refer to function arguments *)
@@ -63,7 +62,7 @@ let emit_func func_table lit_table ir_func =
     (* Recursive walk functions *)    
     let rec emit_inst inst =
         match inst with
-        | Ir.Store (typ, address, value) -> begin
+        | Ir.Store (_, address, value) -> begin
             let address_typ = emit_expr address in
             if address_typ <> Ir.Ptr then raise (Compile_error "Address type is not Ptr");
             asm "push rax";
@@ -96,7 +95,7 @@ let emit_func func_table lit_table ir_func =
         | Ir.Label label_id -> asmf ".label_%d" label_id
         | Ir.Jump label_id -> asmf "jmp .label_%d" label_id
         | Ir.JumpIf (label_id, cond) -> begin
-            let cond_typ = emit_expr cond in
+            emit_expr cond |> ignore;
             asm "cmp rax, 0";
             asmf "jne .label_%d" label_id
         end
@@ -110,7 +109,7 @@ let emit_func func_table lit_table ir_func =
         | Ir.ConstStringAddr s -> asmf "mov rax, string_lit_%d" (id_of_string_lit lit_table s); Ir.Ptr
         | Ir.LocalAddr local_id -> asmf "lea rax, [rbp + %d]" (find_local_offset local_id); Ir.Ptr
         | Ir.Load (typ, addr) -> begin
-            let addr_typ = emit_expr addr in
+            emit_expr addr |> ignore;
             let ld inst dest_reg width = asmf "%s %s, %s [rax]" inst dest_reg width in
             (
             match typ with
@@ -145,6 +144,7 @@ let emit_func func_table lit_table ir_func =
             (
             match op with
             | Ir.Add -> asm "add rax, rcx"
+            | Ir.Sub -> asm "sub rax, rcx"
             | Ir.Mul -> asm "imul rax, rcx"
             | Ir.Div -> asm "cqo"; asm "idiv rcx"
             | Ir.Rem -> asm "cqo"; asm "idiv rcx"; asm "mov rax, rdx"
@@ -154,16 +154,28 @@ let emit_func func_table lit_table ir_func =
             | Ir.ShiftLeft -> asm "sal rax, cl"
             | Ir.ShiftRight -> asm "sar rax, cl"
             | Ir.CompEQ -> materialize_comparison "e"
+            | Ir.CompNEQ -> materialize_comparison "ne"
             | Ir.CompLT -> materialize_comparison "l"
+            | Ir.CompLTE -> materialize_comparison "le"
+            | Ir.CompGT -> materialize_comparison "g"
+            | Ir.CompGTE -> materialize_comparison "ge"
             );
 
             Ir.I64 (* FIXME: Should not hardcode *)
         end
-        | UnaryOp (op, e) -> begin
+        | Ir.UnaryOp (op, e) -> begin
             match op with
-            | Not -> let typ = emit_expr e in asm "not rax"; typ
-            | Neg -> let typ = emit_expr e in asm "neg rax"; typ
+            | Ir.Not -> let typ = emit_expr e in asm "not rax"; typ
+            | Ir.Neg -> let typ = emit_expr e in asm "neg rax"; typ
+            | Ir.LogicalNot -> begin
+                let typ = emit_expr e in
+                asm "test rax, rax";
+                asm "sete al";
+                asm "movzx rax, al";
+                typ
+            end
         end
+        | Ir.ConvertTo (typ, e) -> emit_expr e |> ignore; typ
     in
     List.iter emit_inst ir_func.Ir.insts;
     (out_buffer, stack_bytes_allocated)

@@ -68,6 +68,8 @@ type func = {
     locals : (local_id * local_def) list;
 }
 
+let int64_of_bool b = if b then 1L else 0L
+
 let rec typecheck_expr expr =
     match expr with
     | BinOp (_, lhs, rhs) -> begin
@@ -93,7 +95,7 @@ let typecheck_inst inst =
         if addr_t <> Ptr then raise (Type_error "Store address must have type Ptr");
         if value_t <> store_t then raise (Type_error "Store value type must match type of Store");
     end
-    | Call (dest_opt, func_name, arguments) -> List.iter (fun e -> typecheck_expr e |> ignore) arguments
+    | Call (_, _, arguments) -> List.iter (fun e -> typecheck_expr e |> ignore) arguments
     | Return (Some e) -> typecheck_expr e |> ignore
     | Return None -> ()
     | Label _ | Jump _ | JumpIf _ -> ()
@@ -129,15 +131,17 @@ let limit_width typ x =
     | I16 -> sign_extend 16 x
     | I32 -> sign_extend 32 x
     | I64 -> sign_extend 64 x
+    | Ptr -> zero_extend 64 x
 
 let eval_unaryop typ op x =
     let full_width_result = match op with
     | Neg -> Int64.neg x
     | Not -> Int64.lognot x
+    | LogicalNot -> int64_of_bool (x = 0L)
     in
     limit_width typ full_width_result
 
-let int64_of_bool b = if b then 1L else 0L
+
 
 let eval_binop typ op x y =
     let signed =
@@ -196,6 +200,7 @@ let rec normalize e =
         | _, _, _ -> BinOp (op, lhs, rhs)
     end
     | Load (typ, nonnormal_expr) -> Load (typ, normalize nonnormal_expr)
+    | ConvertTo (typ, nonnormal_expr) -> ConvertTo (typ, normalize nonnormal_expr)
 
 
 let tests () =
