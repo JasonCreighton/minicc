@@ -110,7 +110,7 @@ let func_to_ir ret_ctype func_name func_params func_body =
     let next_local_id = ref 0 in
 
     (* Helper functions *)
-    let add_inst i = insts := i :: !insts in
+    let add_inst i = Ir.typecheck_inst i; insts := i :: !insts in
     let new_label () = let l = !next_label_id in next_label_id := !next_label_id + 1; l in
     let new_local ctype =
         let local_id = !next_local_id in

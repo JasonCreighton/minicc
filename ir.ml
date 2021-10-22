@@ -68,16 +68,36 @@ type func = {
     locals : (local_id * local_def) list;
 }
 
-let rec type_of expr =
+let rec typecheck_expr expr =
     match expr with
     | BinOp (_, lhs, rhs) -> begin
-        let lhs_t = type_of lhs in
-        assert (lhs_t = (type_of rhs));
+        let lhs_t = typecheck_expr lhs in
+        let rhs_t = typecheck_expr rhs in
+        if lhs_t <> rhs_t then raise (Type_error "BinOp operands must have matching type");
         lhs_t
     end
-    | UnaryOp (_, e) -> type_of e
-    | ConstInt (typ, _) | Load (typ, _) | ConvertTo (typ, _) -> typ
-    | ConstStringAddr _ | LocalAddr _ -> Ptr
+    | UnaryOp (_, e) -> typecheck_expr e
+    | Load (typ, addr) -> begin
+        let addr_t = typecheck_expr addr in
+        if addr_t <> Ptr then raise (Type_error "Load address must have type Ptr");
+        typ
+    end
+    | ConvertTo (typ, e) -> typecheck_expr e |> ignore; typ
+    | ConstInt _ | ConstStringAddr _ | LocalAddr _ -> Ptr
+
+let typecheck_inst inst =
+    match inst with
+    | Store (store_t, addr_expr, value_expr) -> begin
+        let addr_t = typecheck_expr addr_expr in
+        let value_t = typecheck_expr value_expr in
+        if addr_t <> Ptr then raise (Type_error "Store address must have type Ptr");
+        if value_t <> store_t then raise (Type_error "Store value type must match type of Store");
+    end
+    | Call (dest_opt, func_name, arguments) -> List.iter (fun e -> typecheck_expr e |> ignore) arguments
+    | Return (Some e) -> typecheck_expr e |> ignore
+    | Return None -> ()
+    | Label _ | Jump _ | JumpIf _ -> ()
+
 
 let size_of typ =
     match typ with
