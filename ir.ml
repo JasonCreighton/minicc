@@ -8,6 +8,7 @@ implicited determined by its children. BinOps and UnaryOps yield a result of
 the same type of their operands, and the types of BinOp operands must match
 each other. *)
 type datatype =
+    | Ptr
     | U8
     | I8
     | U16
@@ -76,14 +77,14 @@ let rec type_of expr =
     end
     | UnaryOp (_, e) -> type_of e
     | ConstInt (typ, _) | Load (typ, _) | ConvertTo (typ, _) -> typ
-    | ConstStringAddr _ | LocalAddr _ -> U64
+    | ConstStringAddr _ | LocalAddr _ -> Ptr
 
 let size_of typ =
     match typ with
     | U8  | I8  -> 8
     | U16 | I16 -> 16
     | U32 | I32 -> 32
-    | U64 | I64 -> 64
+    | U64 | I64 | Ptr -> 64
 
 let logical_not x = UnaryOp (LogicalNot, x)
 
@@ -122,7 +123,7 @@ let eval_binop typ op x y =
     let signed =
         match typ with
         | I8 | I16 | I32 | I64 -> true
-        | U8 | U16 | U32 | U64 -> false
+        | U8 | U16 | U32 | U64 | Ptr -> false
     in
     let cmp = if signed then Int64.compare x y else Int64.unsigned_compare x y in
     let full_width_result = match op with

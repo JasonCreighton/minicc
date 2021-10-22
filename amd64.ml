@@ -36,7 +36,7 @@ let acc_reg_name typ =
     | Ir.U8 | Ir.I8 -> "al"
     | Ir.U16 | Ir.I16 -> "ax"
     | Ir.U32 | Ir.I32 -> "eax"
-    | Ir.U64 | Ir.I64 -> "rax"
+    | Ir.U64 | Ir.I64 | Ir.Ptr -> "rax"
 
 let emit_func func_table lit_table ir_func =
     (* Variables *)
@@ -65,7 +65,7 @@ let emit_func func_table lit_table ir_func =
         match inst with
         | Ir.Store (typ, address, value) -> begin
             let address_typ = emit_expr address in
-            if address_typ <> Ir.U64 then raise (Compile_error "Address type is not U64");
+            if address_typ <> Ir.Ptr then raise (Compile_error "Address type is not Ptr");
             asm "push rax";
             let value_typ = emit_expr value in
             asm "pop rbx";
@@ -107,8 +107,8 @@ let emit_func func_table lit_table ir_func =
         (* FIXME *)
         match expr with
         | Ir.ConstInt (typ, n) -> asmf "mov rax, %Ld" n; typ
-        | Ir.ConstStringAddr s -> asmf "mov rax, string_lit_%d" (id_of_string_lit lit_table s); Ir.U64
-        | Ir.LocalAddr local_id -> asmf "lea rax, [rbp + %d]" (find_local_offset local_id); Ir.U64
+        | Ir.ConstStringAddr s -> asmf "mov rax, string_lit_%d" (id_of_string_lit lit_table s); Ir.Ptr
+        | Ir.LocalAddr local_id -> asmf "lea rax, [rbp + %d]" (find_local_offset local_id); Ir.Ptr
         | Ir.Load (typ, addr) -> begin
             let addr_typ = emit_expr addr in
             let ld inst dest_reg width = asmf "%s %s, %s [rax]" inst dest_reg width in
@@ -117,11 +117,10 @@ let emit_func func_table lit_table ir_func =
                 | Ir.I8 -> ld "movsx" "rax" "byte"
                 | Ir.I16 -> ld "movsx" "rax" "word"
                 | Ir.I32 -> ld "movsx" "rax" "dword"
-                | Ir.I64 -> ld "mov" "rax" "qword"
                 | Ir.U8 -> ld "movzx" "rax" "byte"
                 | Ir.U16 -> ld "movzx" "rax" "word"
                 | Ir.U32 -> ld "mov" "eax" "dword"
-                | Ir.U64 -> ld "mov" "rax" "qword"
+                | Ir.I64 | Ir.U64 | Ir.Ptr -> ld "mov" "rax" "qword"
             );
 
             typ

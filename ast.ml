@@ -100,7 +100,7 @@ let ir_datatype_for_ctype ctype =
     | Unsigned Int -> Ir.U32
     | Signed Long -> Ir.I64
     | Unsigned Long -> Ir.U64
-    | PointerTo _ -> Ir.U64
+    | PointerTo _ -> Ir.Ptr
 
 let func_to_ir ret_ctype func_name func_params func_body =
     let locals = ref [] in
@@ -136,7 +136,7 @@ let func_to_ir ret_ctype func_name func_params func_body =
         | Subscript (ary, idx) -> begin
             let (ArrayOf (elem_ctype, ary_len), addr_ir) = address_of_lvalue ary in
             let idx_ctype, idx_ir = emit_expr idx in
-            (elem_ctype, Ir.BinOp (Ir.Add, addr_ir, Ir.BinOp (Ir.Mul, idx_ir, Ir.ConstInt (Ir.U64, Int64.of_int (sizeof elem_ctype)))))
+            (elem_ctype, Ir.BinOp (Ir.Add, addr_ir, Ir.BinOp (Ir.Mul, Ir.ConvertTo (Ir.Ptr, idx_ir), Ir.ConstInt (Ir.Ptr, Int64.of_int (sizeof elem_ctype)))))
         end
         | Deref addr_expr ->
             let (PointerTo ctype, addr_ir) = address_of_lvalue addr_expr in
