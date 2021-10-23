@@ -326,10 +326,10 @@ let func_to_ir _ _ func_params func_body =
             end
     in
     (* Put arguments into var_table *)
-    List.iteri (fun i (ctype, arg_name) -> Hashtbl.add var_table arg_name (-i, ctype)) func_params;
+    List.iteri (fun i (ctype, arg_name) -> Hashtbl.add var_table arg_name (-(i + 1), ctype)) func_params;
 
     emit_stmt func_body;
-    { Ir.insts = !insts; Ir.locals = !locals; }
+    { Ir.insts = List.rev !insts; Ir.locals = !locals; }
 
 let build_func_table decl_list =
     let func_table = Hashtbl.create 64 in

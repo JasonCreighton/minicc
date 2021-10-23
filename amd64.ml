@@ -48,6 +48,7 @@ let emit_func func_table lit_table ir_func =
         Buffer.add_char out_buffer '\t';
         kbprintf (fun b -> Buffer.add_char b '\n') out_buffer fmt
     in
+    let asm_rawf fmt = bprintf out_buffer fmt in
     let asm str = asmf "%s" str in
     let find_local_offset local_id =
         (* HACK: Negative local IDs refer to function arguments *)
@@ -92,12 +93,12 @@ let emit_func func_table lit_table ir_func =
             (* Optionally save result of call to a local *)
             Option.iter (fun (typ, local_id) -> asmf "mov [rbp + %d], %s" (find_local_offset local_id) (acc_reg_name typ)) dest
         end
-        | Ir.Label label_id -> asmf ".label_%d" label_id
-        | Ir.Jump label_id -> asmf "jmp .label_%d" label_id
+        | Ir.Label label_id -> asm_rawf ".L%d:\n" label_id
+        | Ir.Jump label_id -> asmf "jmp .L%d" label_id
         | Ir.JumpIf (label_id, cond) -> begin
             emit_expr cond |> ignore;
             asm "cmp rax, 0";
-            asmf "jne .label_%d" label_id
+            asmf "jne .L%d" label_id
         end
         | Ir.Return expr_opt ->
             Option.iter (fun e -> emit_expr e |> ignore) expr_opt;
@@ -135,9 +136,10 @@ let emit_func func_table lit_table ir_func =
             Note: Evaluate RHS first, so we can end up with the LHS in rax.
             This makes things nicer for subtraction and division.
             *)
-            emit_expr e2 |> ignore;
+            let rhs_t = emit_expr e2 in
             asm "push rax";
-            emit_expr e1 |> ignore;
+            let lhs_t = emit_expr e1 in
+            assert (lhs_t = rhs_t);
             asm "pop rcx";
 
             (* FIXME: Handle unsigned cases properly *)
@@ -161,7 +163,7 @@ let emit_func func_table lit_table ir_func =
             | Ir.CompGTE -> materialize_comparison "ge"
             );
 
-            Ir.I64 (* FIXME: Should not hardcode *)
+            lhs_t
         end
         | Ir.UnaryOp (op, e) -> begin
             match op with
