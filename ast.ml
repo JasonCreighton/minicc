@@ -58,7 +58,7 @@ and stmt =
     | ForStmt of expr * expr * expr * stmt
     | ReturnStmt of expr option
 and expr =
-    | Lit of int
+    | Lit of int64
     | LitString of string
     | Assign of expr * expr
     | VarRef of string
@@ -74,14 +74,14 @@ and expr =
     | LogicalOr of expr * expr 
     | Call of string * expr list
 
+let sizeof_int int_size =
+    match int_size with
+    | Char -> 1
+    | Short -> 2
+    | Int -> 4
+    | Long -> 8
+
 let rec sizeof ctype =
-    let sizeof_int int_size =
-        match int_size with
-        | Char -> 1
-        | Short -> 2
-        | Int -> 4
-        | Long -> 8
-    in
     match ctype with
     | Void -> raise (Compile_error "Can't use void in sized context")
     | Signed x | Unsigned x -> sizeof_int x
@@ -101,6 +101,22 @@ let ir_datatype_for_ctype ctype =
     | Signed Long -> Ir.I64
     | Unsigned Long -> Ir.U64
     | PointerTo _ -> Ir.Ptr
+
+let usual_arithmetic_conversions lhs_ctype rhs_ctype =
+    match lhs_ctype, rhs_ctype with
+    | _ when lhs_ctype = rhs_ctype -> lhs_ctype (* No conversion necessary *)
+    | (Signed lhs_size as lhs_t), (Signed rhs_size as rhs_t) | (Unsigned lhs_size as lhs_t), (Unsigned rhs_size as rhs_t) ->
+        (* If they are of the same signedness, then promote to the largest size *)
+        if sizeof_int lhs_size > sizeof_int rhs_size
+        then lhs_t
+        else rhs_t
+    | Signed signed_size, Unsigned unsigned_size | Unsigned unsigned_size, Signed signed_size ->
+        (* If they are of different signedness and the unsigned operand is the
+        same same or larger than the signed operand, convert to unsigned.
+        Otherwise, convert to signed. *)
+        if sizeof_int unsigned_size >= sizeof_int signed_size
+        then Unsigned unsigned_size
+        else Signed signed_size
 
 let func_to_ir _ _ func_params func_body =
     let locals = ref [] in
@@ -140,13 +156,14 @@ let func_to_ir _ _ func_params func_body =
         end
         | Deref addr_expr ->
             let (PointerTo ctype, addr_ir) = address_of_lvalue addr_expr in
-            (ctype, Ir.Load (ir_datatype_for_ctype ctype, addr_ir))
+            (ctype, Ir.Load (Ir.Ptr, addr_ir))
         | _ -> raise (Compile_error "expr is not an lvalue")
     and assign_var v expr =
         let local_id, ctype = find_var_loc v in
-        let _, expr_ir = emit_expr expr in
+        let expr_ctype, expr_ir = emit_expr expr in
         let ir_datatype = ir_datatype_for_ctype ctype in
-        add_inst @@ Ir.Store (ir_datatype, Ir.LocalAddr local_id, expr_ir);
+        let converted_ir = if expr_ctype <> ctype then Ir.ConvertTo (ir_datatype, expr_ir) else expr_ir in
+        add_inst @@ Ir.Store (ir_datatype, Ir.LocalAddr local_id, converted_ir);
         (ctype, Ir.Load (ir_datatype, Ir.LocalAddr local_id))
     and inc_or_dec yield_old_value delta expr =
         match expr with
@@ -221,7 +238,11 @@ let func_to_ir _ _ func_params func_body =
             add_inst @@ Ir.Return (Option.map (fun e -> emit_expr e |> snd) expr_opt)
     and emit_expr expr =
         match expr with
-        | Lit n -> (Signed Long, Ir.ConstInt (Ir.I64, Int64.of_int n))
+        | Lit n ->
+            (* Integer literal is either int or long depending on its size *)
+            if (Int64.of_int32 (Int64.to_int32 n)) = n
+            then (Signed Int,  Ir.ConstInt (Ir.I32, n))
+            else (Signed Long, Ir.ConstInt (Ir.I64, n))
         | LitString s -> (PointerTo (Unsigned Char), Ir.ConstStringAddr s)
         | Assign (VarRef v, rhs) -> assign_var v rhs
         | Assign (lvalue, rhs) -> begin
@@ -238,10 +259,13 @@ let func_to_ir _ _ func_params func_body =
         end
         | Deref e -> let (PointerTo ctype, addr_ir) = emit_expr e in (ctype, Ir.Load (ir_datatype_for_ctype ctype, addr_ir))
         | BinOp (op, e1, e2) -> begin
-            let _, e1_ir = emit_expr e1 in
-            let _, e2_ir = emit_expr e2 in
+            let e1_ctype, e1_ir = emit_expr e1 in
+            let e2_ctype, e2_ir = emit_expr e2 in
+            let result_ctype = usual_arithmetic_conversions e1_ctype e2_ctype in
+            let result_irtype = ir_datatype_for_ctype result_ctype in
+            let e1_ir = if e1_ctype <> result_ctype then Ir.ConvertTo (result_irtype, e1_ir) else e1_ir in
+            let e2_ir = if e2_ctype <> result_ctype then Ir.ConvertTo (result_irtype, e2_ir) else e2_ir in
 
-            (* FIXME: Handle unsigned cases properly *)
             let result_ir = match op with
             | Add -> Ir.BinOp (Ir.Add, e1_ir, e2_ir)
             | Sub -> Ir.BinOp (Ir.Sub, e1_ir, e2_ir)
@@ -261,8 +285,7 @@ let func_to_ir _ _ func_params func_body =
             | CompGTE -> Ir.BinOp (Ir.CompGTE, e1_ir, e2_ir)
             in
 
-            (Signed Long, result_ir) (* FIXME: Should not hardcode type *)
-
+            (result_ctype, result_ir)
         end
         | UnaryOp (op, e) -> begin
             match op with

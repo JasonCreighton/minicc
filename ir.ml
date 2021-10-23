@@ -85,7 +85,8 @@ let rec typecheck_expr expr =
         typ
     end
     | ConvertTo (typ, e) -> typecheck_expr e |> ignore; typ
-    | ConstInt _ | ConstStringAddr _ | LocalAddr _ -> Ptr
+    | ConstInt (typ, _) -> typ
+    | ConstStringAddr _ | LocalAddr _ -> Ptr
 
 let typecheck_inst inst =
     match inst with

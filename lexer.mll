@@ -56,7 +56,7 @@ rule token = parse
   | ';'            { SEMICOLON }
   | '='            { EQUAL }
   | id as lxm      { IDENTIFIER(lxm) }
-  | digit+ as lxm { LITERAL_INT(int_of_string lxm) }
+  | digit+ as lxm { LITERAL_INT(Int64.of_string lxm) }
   | eof            { EOF }
 
 and quoted_string pieces = parse

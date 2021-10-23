@@ -1,4 +1,4 @@
-%token <int> LITERAL_INT
+%token <int64> LITERAL_INT
 %token <string> IDENTIFIER
 %token <string> LITERAL_STRING
 %token VOID
@@ -85,8 +85,8 @@ prefix_ctype_modifiers
 ;
 
 postfix_ctype_modifiers
-  : LBRACKET LITERAL_INT RBRACKET { fun typ -> Ast.ArrayOf (typ, $2) }
-  | LBRACKET LITERAL_INT RBRACKET postfix_ctype_modifiers { fun typ -> Ast.ArrayOf ($4 typ, $2) }
+  : LBRACKET LITERAL_INT RBRACKET { fun typ -> Ast.ArrayOf (typ, Int64.to_int $2) }
+  | LBRACKET LITERAL_INT RBRACKET postfix_ctype_modifiers { fun typ -> Ast.ArrayOf ($4 typ, Int64.to_int $2) }
 ;
 
 primitive_type
