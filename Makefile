@@ -43,7 +43,7 @@ build/regression: build/regression.o
 	gcc build/regression.o -o build/regression
 
 build/regression_golden: regression.c
-	gcc -Wall -Werror regression.c -o build/regression_golden
+	gcc -Wall -Werror -fwrapv regression.c -o build/regression_golden
 
 build/regression_actual_out.txt: build/regression
 	./build/regression > ./build/regression_actual_out.txt

@@ -1,4 +1,7 @@
 // Regression test for minicc compiler
+//
+// Should be compiled with -fwrapv or similar, because minicc wraps on
+// overflow.
 
 extern int printf(const char *fmt, ...);
 
@@ -19,6 +22,33 @@ void test_comments() {
     printf("/* Comments should not be interpreted inside strings. */\n");
     printf("Nor across /* ... ");
     printf("*/ strings.\n");
+}
+
+void test_evaluation_width() {
+    // Almost all evaluation in C is done at the width of an int or wider
+
+    begin_test("test_evaluation_width");
+    // const unsigned char UCHAR_MAX = 255;
+    // const unsigned short USHORT_MAX = 65535;
+    // const unsigned int UINT_MAX = 4294967295;
+    // const unsigned long ULONG_MAX = 18446744073709551615;
+    const signed char SCHAR_MIN = -128;
+    const signed char SCHAR_MAX = 127;
+    const signed short SHRT_MIN = -32768;
+    const signed short SHRT_MAX = 32767;
+    const signed int INT_MIN = -2147483648;
+    const signed int INT_MAX = 2147483647;
+    const signed long LONG_MIN = -9223372036854775807 - 1;
+    const signed long LONG_MAX = 9223372036854775807;
+
+    printf("(SCHAR_MIN - 1) / 2 = %d\n", (SCHAR_MIN - 1) / 2);
+    printf("(SCHAR_MAX + 1) / 2 = %d\n", (SCHAR_MAX + 1) / 2);
+    printf("(SHRT_MIN - 1) / 2 = %d\n", (SHRT_MIN - 1) / 2);
+    printf("(SHRT_MAX + 1) / 2 = %d\n", (SHRT_MAX + 1) / 2);
+    printf("(INT_MIN - 1) / 2 = %d\n", (INT_MIN - 1) / 2);
+    printf("(INT_MAX + 1) / 2 = %d\n", (INT_MAX + 1) / 2);
+    printf("(LONG_MIN - 1) / 2 = %ld\n", (LONG_MIN - 1) / 2);
+    printf("(LONG_MAX + 1) / 2 = %ld\n", (LONG_MAX + 1) / 2);
 }
 
 int func3() {
@@ -165,6 +195,7 @@ int main() {
     }
 
     test_comments();
+    test_evaluation_width();
     test_nested_calls();
     test_signed_integer_operations();
     test_arrays();
