@@ -7,6 +7,8 @@ let hex = ['0'-'9' 'a'-'f' 'A'-'F']
 let id    = alpha (alpha|digit|'_')*
 rule token = parse
     [' ' '\t' '\r' '\n']     { token lexbuf }     (* skip blanks *)
+  | "//" [^ '\n']* '\n' { token lexbuf } (* Skip single line comments *)
+  | "/*"           { multiline_comment lexbuf }
   | "char"         { CHAR }
   | "short"        { SHORT }
   | "int"          { INT }
@@ -58,6 +60,13 @@ rule token = parse
   | id as lxm      { IDENTIFIER(lxm) }
   | digit+ as lxm { LITERAL_INT(Int64.of_string lxm) }
   | eof            { EOF }
+
+(* Multiline comments need special handling to avoid consuming too much input
+or interacting incorrectly with strings *)
+and multiline_comment = parse
+    "*/"     { token lexbuf }             (* End comment *)
+  | [^ '*']+ { multiline_comment lexbuf } (* Skip non-star charcters *)
+  | '*'      { multiline_comment lexbuf } (* Skip single star *)
 
 and quoted_string pieces = parse
     '"'   { LITERAL_STRING(String.concat "" (List.rev pieces)) } (* End of quoted string*)

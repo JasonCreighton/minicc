@@ -1,7 +1,24 @@
+// Regression test for minicc compiler
+
 extern int printf(const char *fmt, ...);
 
 void begin_test(const char *test_name) {
     printf("=== %s ===\n", test_name);
+}
+
+void test_comments() {
+    // Single line comments should be supported
+
+    begin_test("test_comments"); // Comments should work on the same line as code
+
+    /*
+     * Multiline comments are also supported
+     */
+
+    printf("// Comments should not be interpreted inside strings.\n");
+    printf("/* Comments should not be interpreted inside strings. */\n");
+    printf("Nor across /* ... ");
+    printf("*/ strings.\n");
 }
 
 int func3() {
@@ -147,6 +164,7 @@ int main() {
         x = x - 1;
     }
 
+    test_comments();
     test_nested_calls();
     test_signed_integer_operations();
     test_arrays();
