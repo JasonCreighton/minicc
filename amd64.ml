@@ -163,6 +163,17 @@ let emit_func func_table lit_table ir_func =
             | Ir.CompGTE -> materialize_comparison "ge"
             );
 
+            (* Sign or zero extend as appropriate *)
+            (match lhs_t with
+            | Ir.I8 -> asm "movsx rax, al"
+            | Ir.I16 -> asm "movsx rax, ax"
+            | Ir.I32 -> asm "movsx rax, eax"
+            | Ir.U8 -> asm "movzx rax, al"
+            | Ir.U16 -> asm "movzx rax, ax"
+            | Ir.U32 -> asm "mov eax, eax"
+            | Ir.I64 | Ir.U64 | Ir.Ptr -> ()
+            );
+
             lhs_t
         end
         | Ir.UnaryOp (op, e) -> begin

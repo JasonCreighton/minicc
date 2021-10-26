@@ -26,12 +26,11 @@ void test_comments() {
 
 void test_evaluation_width() {
     // Almost all evaluation in C is done at the width of an int or wider
-
     begin_test("test_evaluation_width");
-    // const unsigned char UCHAR_MAX = 255;
-    // const unsigned short USHORT_MAX = 65535;
-    // const unsigned int UINT_MAX = 4294967295;
-    // const unsigned long ULONG_MAX = 18446744073709551615;
+    const unsigned char UCHAR_MAX = 255;
+    const unsigned short USHORT_MAX = 65535;
+    const unsigned int UINT_MAX = 4294967295;
+    const unsigned long ULONG_MAX = 18446744073709551615UL;
     const signed char SCHAR_MIN = -128;
     const signed char SCHAR_MAX = 127;
     const signed short SHRT_MIN = -32768;
@@ -40,6 +39,16 @@ void test_evaluation_width() {
     const signed int INT_MAX = 2147483647;
     const signed long LONG_MIN = -9223372036854775807 - 1;
     const signed long LONG_MAX = 9223372036854775807;
+
+    // Validate that arithmetic gets promoted to int even when literals are
+    // not used in the expression.
+    const unsigned char uchar_one = 1;
+    const unsigned short ushort_one = 1;
+    printf("UCHAR_MAX + uchar_one = %d\n", UCHAR_MAX + uchar_one);
+    printf("USHORT_MAX + ushort_one = %d\n", USHORT_MAX + ushort_one);
+
+    printf("UINT_MAX + 1 = %d\n", UINT_MAX + 1);
+    printf("ULONG_MAX + 1 = %ld\n", ULONG_MAX + 1);
 
     printf("(SCHAR_MIN - 1) / 2 = %d\n", (SCHAR_MIN - 1) / 2);
     printf("(SCHAR_MAX + 1) / 2 = %d\n", (SCHAR_MAX + 1) / 2);

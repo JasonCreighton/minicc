@@ -109,8 +109,9 @@ let ir_datatype_for_ctype ctype =
     | Unsigned Long -> Ir.U64
     | PointerTo _ -> Ir.Ptr
 
-let usual_arithmetic_conversions lhs_ctype rhs_ctype =
+let binop_result_ctype lhs_ctype rhs_ctype =
     match lhs_ctype, rhs_ctype with
+    | _ when sizeof lhs_ctype < 4 && sizeof rhs_ctype < 4 -> Signed Int (* Always promote to at least an int *)
     | _ when lhs_ctype = rhs_ctype -> lhs_ctype (* No conversion necessary *)
     | (Signed lhs_size as lhs_t), (Signed rhs_size as rhs_t) | (Unsigned lhs_size as lhs_t), (Unsigned rhs_size as rhs_t) ->
         (* If they are of the same signedness, then promote to the largest size *)
@@ -284,7 +285,7 @@ let func_to_ir _ _ func_params func_body =
         | BinOp (op, e1, e2) -> begin
             let e1_ctype, e1_ir = emit_expr e1 in
             let e2_ctype, e2_ir = emit_expr e2 in
-            let result_ctype = usual_arithmetic_conversions e1_ctype e2_ctype in
+            let result_ctype = binop_result_ctype e1_ctype e2_ctype in
             let result_irtype = ir_datatype_for_ctype result_ctype in
             let e1_ir = if e1_ctype <> result_ctype then Ir.ConvertTo (result_irtype, e1_ir) else e1_ir in
             let e2_ir = if e2_ctype <> result_ctype then Ir.ConvertTo (result_irtype, e2_ir) else e2_ir in
@@ -364,6 +365,13 @@ let build_func_table decl_list =
 
     func_table
 
+let test_binop_result_ctype () = begin
+    assert ((binop_result_ctype (Signed Char) (Signed Char)) = Signed Int);
+    assert ((binop_result_ctype (Signed Int) (Unsigned Int)) = Unsigned Int);
+    assert ((binop_result_ctype (Signed Long) (Unsigned Int)) = Signed Long);
+    assert ((binop_result_ctype (Signed Long) (Unsigned Long)) = Unsigned Long);
+end
+
 let test_ctype_for_integer_literal () = begin
     assert ((ctype_for_integer_literal 0L 0) = Signed Int);
     assert ((ctype_for_integer_literal 2000000000L 0) = Signed Int);
@@ -375,5 +383,6 @@ let test_ctype_for_integer_literal () = begin
 end
 
 let tests () = begin
+    test_binop_result_ctype ();
     test_ctype_for_integer_literal ();
 end
