@@ -1,4 +1,4 @@
-%token <int64> LITERAL_INT
+%token <int64 * Ast.IntLitFlags.t> LITERAL_INT
 %token <string> IDENTIFIER
 %token <string> LITERAL_STRING
 %token VOID
@@ -85,8 +85,8 @@ prefix_ctype_modifiers
 ;
 
 postfix_ctype_modifiers
-  : LBRACKET LITERAL_INT RBRACKET { fun typ -> Ast.ArrayOf (typ, Int64.to_int $2) }
-  | LBRACKET LITERAL_INT RBRACKET postfix_ctype_modifiers { fun typ -> Ast.ArrayOf ($4 typ, Int64.to_int $2) }
+  : LBRACKET LITERAL_INT RBRACKET { fun typ -> Ast.ArrayOf (typ, Int64.to_int (fst $2)) }
+  | LBRACKET LITERAL_INT RBRACKET postfix_ctype_modifiers { fun typ -> Ast.ArrayOf ($4 typ, Int64.to_int (fst $2)) }
 ;
 
 primitive_type
@@ -130,7 +130,7 @@ statement
 
 /* Precedence taken from here: https://en.cppreference.com/w/c/language/operator_precedence */
 p0_expr
-  : LITERAL_INT             { Ast.Lit $1 }
+  : LITERAL_INT             { let n, flags = $1 in Ast.Lit (n, flags) }
   | LITERAL_STRING          { Ast.LitString $1 }
   | IDENTIFIER              { Ast.VarRef $1 }
   | LPAREN expr RPAREN      { $2 }

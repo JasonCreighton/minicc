@@ -7,6 +7,7 @@ let should_not_compile msg fragment =
 
 let run_all () =
     Ir.tests ();
+    Ast.tests ();
     
     should_not_compile "Assignment to constant" "2 = 2;";
     should_not_compile "Assignment to undeclared variable" "int x; y = 7;";

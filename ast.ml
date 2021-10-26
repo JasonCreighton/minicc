@@ -2,6 +2,13 @@ open Printf
 
 exception Compile_error of string
 
+module IntLitFlags = struct
+    type t = int
+    let decimal = 0x1
+    let unsigned = 0x2
+    let long = 0x4
+end
+
 type int_size =
     | Char
     | Short
@@ -58,7 +65,7 @@ and stmt =
     | ForStmt of expr * expr * expr * stmt
     | ReturnStmt of expr option
 and expr =
-    | Lit of int64
+    | Lit of int64 * IntLitFlags.t
     | LitString of string
     | Assign of expr * expr
     | VarRef of string
@@ -117,6 +124,24 @@ let usual_arithmetic_conversions lhs_ctype rhs_ctype =
         if sizeof_int unsigned_size >= sizeof_int signed_size
         then Unsigned unsigned_size
         else Signed signed_size
+
+let ctype_for_integer_literal n (flags : IntLitFlags.t) =
+    let fits_int = Int64.unsigned_compare n (Int64.shift_left 1L 31) < 0 in
+    let fits_uint = Int64.unsigned_compare n (Int64.shift_left 1L 32) < 0 in
+    let fits_long = Int64.unsigned_compare n (Int64.shift_left 1L 63) < 0 in
+    let fits_ulong = true in
+    let signed_okay = (flags land IntLitFlags.unsigned) = 0 in
+    let unsigned_okay = ((flags land IntLitFlags.unsigned) <> 0) || ((flags land IntLitFlags.decimal) = 0) in
+    let int_okay = (flags land IntLitFlags.long) = 0 in
+    let long_okay = true in
+
+    (* Find the smallest type that fits the literal, subject to the
+    restrictions implied by the flags. *)
+    if      fits_int   && int_okay  && signed_okay   then Signed   Int
+    else if fits_uint  && int_okay  && unsigned_okay then Unsigned Int
+    else if fits_long  && long_okay && signed_okay   then Signed   Long
+    else if fits_ulong && long_okay && unsigned_okay then Unsigned Long
+    else failwith "Could not find type for integer literal"
 
 let func_to_ir _ _ func_params func_body =
     let locals = ref [] in
@@ -238,11 +263,9 @@ let func_to_ir _ _ func_params func_body =
             add_inst @@ Ir.Return (Option.map (fun e -> emit_expr e |> snd) expr_opt)
     and emit_expr expr =
         match expr with
-        | Lit n ->
-            (* Integer literal is either int or long depending on its size *)
-            if (Int64.of_int32 (Int64.to_int32 n)) = n
-            then (Signed Int,  Ir.ConstInt (Ir.I32, n))
-            else (Signed Long, Ir.ConstInt (Ir.I64, n))
+        | Lit (n, flags) ->
+            let ctype = ctype_for_integer_literal n flags in
+            (ctype, Ir.ConstInt(ir_datatype_for_ctype ctype, n))
         | LitString s -> (PointerTo (Unsigned Char), Ir.ConstStringAddr s)
         | Assign (VarRef v, rhs) -> assign_var v rhs
         | Assign (lvalue, rhs) -> begin
@@ -340,3 +363,17 @@ let build_func_table decl_list =
     ) decl_list;
 
     func_table
+
+let test_ctype_for_integer_literal () = begin
+    assert ((ctype_for_integer_literal 0L 0) = Signed Int);
+    assert ((ctype_for_integer_literal 2000000000L 0) = Signed Int);
+    assert ((ctype_for_integer_literal 2000000000L IntLitFlags.long) = Signed Long);
+    assert ((ctype_for_integer_literal 3000000000L 0) = Unsigned Int);
+    assert ((ctype_for_integer_literal 3000000000L IntLitFlags.decimal) = Signed Long);
+    assert ((ctype_for_integer_literal 3000000000L (IntLitFlags.decimal lor IntLitFlags.unsigned)) = Unsigned Int);
+    assert ((ctype_for_integer_literal 5000000000L (IntLitFlags.decimal lor IntLitFlags.unsigned)) = Unsigned Long);
+end
+
+let tests () = begin
+    test_ctype_for_integer_literal ();
+end
