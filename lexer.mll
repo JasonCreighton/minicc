@@ -45,6 +45,7 @@ rule token = parse
   | '&'            { AMPERSAND }
   | '^'            { BITXOR }
   | '|'            { BITOR }
+  | '~'            { BITNOT }
   | '!'            { LOGICALNOT }
   | "&&"           { LOGICALAND }
   | "||"           { LOGICALOR }

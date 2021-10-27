@@ -115,8 +115,11 @@ void test_signed_integer_operations() {
     begin_test("test_signed_integer_operations");
 
     for(i = 0; i < 17; ++i) {
+        x = test_vector[i];
+        printf("!%d = %d\n", x, !x);
+        printf("~%d = %d\n", x, ~x);
+
         for(j = 0; j < 17; ++j) {
-            x = test_vector[i];
             y = test_vector[j];
 
             printf("%d + %d = %d\n", x, y, x + y);
@@ -168,8 +171,11 @@ void test_unsigned_integer_operations() {
     begin_test("test_unsigned_integer_operations");
 
     for(i = 0; i < 10; ++i) {
+        x = test_vector[i];
+        printf("!%u = %d\n", x, !x);
+        printf("~%u = %u\n", x, ~x);
+
         for(j = 0; j < 10; ++j) {
-            x = test_vector[i];
             y = test_vector[j];
 
             printf("%u + %u = %u\n", x, y, x + y);
@@ -228,8 +234,11 @@ void test_signed_long_operations() {
     begin_test("test_signed_long_operations");
 
     for(i = 0; i < 17; ++i) {
+        x = test_vector[i];
+        printf("!%ld = %d\n", x, !x);
+        printf("~%ld = %ld\n", x, ~x);
+
         for(j = 0; j < 17; ++j) {
-            x = test_vector[i];
             y = test_vector[j];
 
             printf("%ld + %ld = %ld\n", x, y, x + y);
@@ -281,8 +290,11 @@ void test_unsigned_long_operations() {
     begin_test("test_unsigned_long_operations");
 
     for(i = 0; i < 10; ++i) {
+        x = test_vector[i];
+        printf("!%lu = %d\n", x, !x);
+        printf("~%lu = %lu\n", x, ~x);
+
         for(j = 0; j < 10; ++j) {
-            x = test_vector[i];
             y = test_vector[j];
 
             printf("%lu + %lu = %lu\n", x, y, x + y);

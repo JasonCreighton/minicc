@@ -12,7 +12,7 @@
 %token LSHIFT RSHIFT
 %token LESSTHAN LESSTHANEQUAL GREATERTHAN GREATERTHANEQUAL EQUALEQUAL NOTEQUAL
 %token AMPERSAND
-%token BITXOR BITOR
+%token BITXOR BITOR BITNOT
 %token LOGICALAND
 %token LOGICALOR
 %token LOGICALNOT
@@ -148,6 +148,7 @@ p1_expr
 
 p2_expr
   : p1_expr { $1 }
+  | BITNOT p2_expr { Ast.UnaryOp (Ast.BitNot, $2) }
   | LOGICALNOT p2_expr { Ast.UnaryOp (Ast.LogicalNot, $2) }
   | TIMES p2_expr { Ast.Deref $2 }
   | AMPERSAND p2_expr { Ast.UnaryOp (Ast.AddressOf, $2) }
