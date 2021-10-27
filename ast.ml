@@ -188,7 +188,7 @@ let func_to_ir _ _ func_params func_body =
         let local_id, ctype = find_var_loc v in
         let expr_ctype, expr_ir = emit_expr expr in
         let ir_datatype = ir_datatype_for_ctype ctype in
-        let converted_ir = if expr_ctype <> ctype then Ir.ConvertTo (ir_datatype, expr_ir) else expr_ir in
+        let converted_ir = Ir.convert ir_datatype (ir_datatype_for_ctype expr_ctype) expr_ir in
         add_inst @@ Ir.Store (ir_datatype, Ir.LocalAddr local_id, converted_ir);
         (ctype, Ir.Load (ir_datatype, Ir.LocalAddr local_id))
     and inc_or_dec yield_old_value delta expr =
@@ -233,10 +233,10 @@ let func_to_ir _ _ func_params func_body =
         let result_local_id = new_local (Unsigned Char) in
         let short_circuit_label_id = new_label () in
         let e1_ctype, e1_ir = emit_expr e1 in
-        add_inst @@ Ir.Store (Ir.U8, Ir.LocalAddr result_local_id, Ir.logical_not (Ir.BinOp (Ir.CompEQ, e1_ir, Ir.ConstInt (ir_datatype_for_ctype e1_ctype, 0L))));
+        add_inst @@ Ir.Store (Ir.U8, Ir.LocalAddr result_local_id, Ir.ConvertTo (Ir.U8, Ir.logical_not (Ir.BinOp (Ir.CompEQ, e1_ir, Ir.ConstInt (ir_datatype_for_ctype e1_ctype, 0L)))));
         add_inst @@ Ir.JumpIf (short_circuit_label_id, Ir.BinOp (Ir.CompEQ, Ir.Load(Ir.U8, Ir.LocalAddr result_local_id), Ir.ConstInt (Ir.U8, if short_circuit_condition then 1L else 0L)));
         let e2_ctype, e2_ir = emit_expr e2 in
-        add_inst @@ Ir.Store (Ir.U8, Ir.LocalAddr result_local_id, Ir.logical_not (Ir.BinOp (Ir.CompEQ, e2_ir, Ir.ConstInt (ir_datatype_for_ctype e2_ctype, 0L))));
+        add_inst @@ Ir.Store (Ir.U8, Ir.LocalAddr result_local_id, Ir.ConvertTo (Ir.U8, Ir.logical_not (Ir.BinOp (Ir.CompEQ, e2_ir, Ir.ConstInt (ir_datatype_for_ctype e2_ctype, 0L)))));
         add_inst @@ Ir.Label short_circuit_label_id;
 
         (Unsigned Char, Ir.Load (Ir.U8, Ir.LocalAddr result_local_id))
@@ -271,8 +271,10 @@ let func_to_ir _ _ func_params func_body =
         | Assign (VarRef v, rhs) -> assign_var v rhs
         | Assign (lvalue, rhs) -> begin
             let lhs_ctype, lhs_addr_ir = address_of_lvalue lvalue in
-            let _, rhs_ir = emit_expr rhs in
-            add_inst @@ Ir.Store (ir_datatype_for_ctype lhs_ctype, lhs_addr_ir, rhs_ir);
+            let rhs_ctype, rhs_ir = emit_expr rhs in
+            let lhs_irtype = ir_datatype_for_ctype lhs_ctype in
+            let rhs_irtype = ir_datatype_for_ctype rhs_ctype in
+            add_inst @@ Ir.Store (ir_datatype_for_ctype lhs_ctype, lhs_addr_ir, Ir.convert lhs_irtype rhs_irtype rhs_ir);
 
             (lhs_ctype, Ir.Load (ir_datatype_for_ctype lhs_ctype, lhs_addr_ir))
         end
@@ -287,8 +289,10 @@ let func_to_ir _ _ func_params func_body =
             let e2_ctype, e2_ir = emit_expr e2 in
             let result_ctype = binop_result_ctype e1_ctype e2_ctype in
             let result_irtype = ir_datatype_for_ctype result_ctype in
-            let e1_ir = if e1_ctype <> result_ctype then Ir.ConvertTo (result_irtype, e1_ir) else e1_ir in
-            let e2_ir = if e2_ctype <> result_ctype then Ir.ConvertTo (result_irtype, e2_ir) else e2_ir in
+            let e1_irtype = ir_datatype_for_ctype e1_ctype in
+            let e2_irtype = ir_datatype_for_ctype e2_ctype in
+            let e1_ir = Ir.convert result_irtype e1_irtype e1_ir in
+            let e2_ir = Ir.convert result_irtype e2_irtype e2_ir in
 
             let result_ir = match op with
             | Add -> Ir.BinOp (Ir.Add, e1_ir, e2_ir)
@@ -344,9 +348,9 @@ let func_to_ir _ _ func_params func_body =
             begin
                 let result_local_id = new_local (Signed Long) in (* FIXME: Don't hardcode type *)
                 let evaluated_args = List.map (fun e -> emit_expr e |> snd) args in
-                add_inst @@ Ir.Call (Some (Ir.U64, result_local_id), func_name, evaluated_args);
+                add_inst @@ Ir.Call (Some (Ir.I64, result_local_id), func_name, evaluated_args);
 
-                (Signed Long, Ir.Load (Ir.U64, Ir.LocalAddr result_local_id)) (* FIXME: Don't hardcode type *)
+                (Signed Long, Ir.Load (Ir.I64, Ir.LocalAddr result_local_id)) (* FIXME: Don't hardcode type *)
             end
     in
     (* Put arguments into var_table *)

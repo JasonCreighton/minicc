@@ -142,8 +142,6 @@ let eval_unaryop typ op x =
     in
     limit_width typ full_width_result
 
-
-
 let eval_binop typ op x y =
     let signed =
         match typ with
@@ -173,6 +171,12 @@ let eval_binop typ op x y =
     | CompGTE -> int64_of_bool (cmp >= 0)
     in
     limit_width typ full_width_result
+
+let convert to_type from_type expr =
+    assert ((typecheck_expr expr) = from_type);
+    if to_type <> from_type
+    then ConvertTo (to_type, expr)
+    else expr
 
 let rec normalize e =
     match e with

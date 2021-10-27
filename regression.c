@@ -87,22 +87,50 @@ void test_nested_calls() {
 }
 
 void test_signed_integer_operations() {
+    int test_vector[17];
+
+    test_vector[0] = 0;
+    test_vector[1] = 1;
+    test_vector[2] = -1;
+    test_vector[3] = 2;
+    test_vector[4] = -2;
+    test_vector[5] = 3;
+    test_vector[6] = -3;
+    test_vector[7] = 10;
+    test_vector[8] = -10;
+    test_vector[9] = 30;
+    test_vector[10] = -30;
+    test_vector[11] = 1000000000;
+    test_vector[12] = -1000000000;
+    test_vector[13] = 2000000000;
+    test_vector[14] = -2000000000;
+    test_vector[15] = 2147483647;
+    test_vector[16] = -2147483648;
+
+    int i;
+    int j;
     int x;
     int y;
 
     begin_test("test_signed_integer_operations");
 
-    for(x = -10; x <= 10; ++x) {
-        for(y = -10; y <= 10; ++y) {
+    for(i = 0; i < 17; ++i) {
+        for(j = 0; j < 17; ++j) {
+            x = test_vector[i];
+            y = test_vector[j];
+
             printf("%d + %d = %d\n", x, y, x + y);
             printf("%d - %d = %d\n", x, y, x - y);
             printf("%d * %d = %d\n", x, y, x * y);
 
-            if(y != 0) printf("%d / %d = %d\n", x, y, x / y);
-            if(y != 0) printf("%d %% %d = %d\n", x, y, x % y);
+            // Can't divide by zero, or divide MIN_INT by -1
+            if(y != 0 && !(x == -2147483648 && y == -1)) {
+                printf("%d / %d = %d\n", x, y, x / y);
+                printf("%d %% %d = %d\n", x, y, x % y);
+            }
 
-            if(y >= 0) printf("%d << %d = %d\n", x, y, x << y);
-            if(y >= 0) printf("%d >> %d = %d\n", x, y, x >> y);
+            printf("%d << (%d & 31) = %d\n", x, y, x << (y & 31));
+            printf("%d >> (%d & 31) = %d\n", x, y, x >> (y & 31));
 
             printf("%d & %d = %d\n", x, y, x & y);
             printf("%d | %d = %d\n", x, y, x | y);
@@ -117,6 +145,60 @@ void test_signed_integer_operations() {
         }
     }
 }
+
+void test_unsigned_integer_operations() {
+    unsigned int test_vector[10];
+
+    test_vector[0] = 0;
+    test_vector[1] = 1;
+    test_vector[2] = 2;
+    test_vector[3] = 3;
+    test_vector[4] = 10;
+    test_vector[5] = 30;
+    test_vector[6] = 1000000000;
+    test_vector[7] = 2000000000;
+    test_vector[8] = 3000000000;
+    test_vector[9] = 4294967295;
+
+    int i;
+    int j;
+    unsigned int x;
+    unsigned int y;
+
+    begin_test("test_unsigned_integer_operations");
+
+    for(i = 0; i < 10; ++i) {
+        for(j = 0; j < 10; ++j) {
+            x = test_vector[i];
+            y = test_vector[j];
+
+            printf("%u + %u = %u\n", x, y, x + y);
+            printf("%u - %u = %u\n", x, y, x - y);
+            printf("%u * %u = %u\n", x, y, x * y);
+
+            // Can't divide by zero
+            if(y != 0) {
+                printf("%u / %u = %u\n", x, y, x / y);
+                printf("%u %% %u = %u\n", x, y, x % y);
+            }
+
+            printf("%u << (%u & 31) = %u\n", x, y, x << (y & 31));
+            printf("%u >> (%u & 31) = %u\n", x, y, x >> (y & 31));
+
+            printf("%u & %u = %u\n", x, y, x & y);
+            printf("%u | %u = %u\n", x, y, x | y);
+            printf("%u ^ %u = %u\n", x, y, x ^ y);
+
+            printf("%u > %u = %u\n", x, y, x > y);
+            printf("%u < %u = %u\n", x, y, x < y);
+            printf("%u >= %u = %u\n", x, y, x >= y);
+            printf("%u <= %u = %u\n", x, y, x <= y);
+            printf("%u != %u = %u\n", x, y, x != y);
+            printf("%u == %u = %u\n", x, y, x == y);
+        }
+    }
+}
+
 
 void test_arrays() {
     int ary[10];
@@ -207,6 +289,7 @@ int main() {
     test_evaluation_width();
     test_nested_calls();
     test_signed_integer_operations();
+    test_unsigned_integer_operations();
     test_arrays();
     test_pointers();
 
