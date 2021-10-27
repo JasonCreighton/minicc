@@ -189,12 +189,125 @@ void test_unsigned_integer_operations() {
             printf("%u | %u = %u\n", x, y, x | y);
             printf("%u ^ %u = %u\n", x, y, x ^ y);
 
-            printf("%u > %u = %u\n", x, y, x > y);
-            printf("%u < %u = %u\n", x, y, x < y);
-            printf("%u >= %u = %u\n", x, y, x >= y);
-            printf("%u <= %u = %u\n", x, y, x <= y);
-            printf("%u != %u = %u\n", x, y, x != y);
-            printf("%u == %u = %u\n", x, y, x == y);
+            printf("%u > %u = %d\n", x, y, x > y);
+            printf("%u < %u = %d\n", x, y, x < y);
+            printf("%u >= %u = %d\n", x, y, x >= y);
+            printf("%u <= %u = %d\n", x, y, x <= y);
+            printf("%u != %u = %d\n", x, y, x != y);
+            printf("%u == %u = %d\n", x, y, x == y);
+        }
+    }
+}
+
+void test_signed_long_operations() {
+    long test_vector[17];
+
+    test_vector[0] = 0;
+    test_vector[1] = 1;
+    test_vector[2] = -1;
+    test_vector[3] = 2;
+    test_vector[4] = -2;
+    test_vector[5] = 3;
+    test_vector[6] = -3;
+    test_vector[7] = 10;
+    test_vector[8] = -10;
+    test_vector[9] = 30;
+    test_vector[10] = -30;
+    test_vector[11] = 1000000000000;
+    test_vector[12] = -1000000000000;
+    test_vector[13] = 2000000000000;
+    test_vector[14] = -2000000000000;
+    test_vector[15] = 9223372036854775807;
+    test_vector[16] = -9223372036854775807 - 1;
+
+    int i;
+    int j;
+    long x;
+    long y;
+
+    begin_test("test_signed_long_operations");
+
+    for(i = 0; i < 17; ++i) {
+        for(j = 0; j < 17; ++j) {
+            x = test_vector[i];
+            y = test_vector[j];
+
+            printf("%ld + %ld = %ld\n", x, y, x + y);
+            printf("%ld - %ld = %ld\n", x, y, x - y);
+            printf("%ld * %ld = %ld\n", x, y, x * y);
+
+            // Can't divide by zero, or divide MIN_INT by -1
+            if(y != 0 && !(x == (-9223372036854775807 - 1) && y == -1)) {
+                printf("%ld / %ld = %ld\n", x, y, x / y);
+                printf("%ld %% %ld = %ld\n", x, y, x % y);
+            }
+
+            printf("%ld << (%ld & 63) = %ld\n", x, y, x << (y & 63));
+            printf("%ld >> (%ld & 63) = %ld\n", x, y, x >> (y & 63));
+
+            printf("%ld & %ld = %ld\n", x, y, x & y);
+            printf("%ld | %ld = %ld\n", x, y, x | y);
+            printf("%ld ^ %ld = %ld\n", x, y, x ^ y);
+
+            printf("%ld > %ld = %d\n", x, y, x > y);
+            printf("%ld < %ld = %d\n", x, y, x < y);
+            printf("%ld >= %ld = %d\n", x, y, x >= y);
+            printf("%ld <= %ld = %d\n", x, y, x <= y);
+            printf("%ld != %ld = %d\n", x, y, x != y);
+            printf("%ld == %ld = %d\n", x, y, x == y);
+        }
+    }
+}
+
+void test_unsigned_long_operations() {
+    unsigned long test_vector[10];
+
+    test_vector[0] = 0;
+    test_vector[1] = 1;
+    test_vector[2] = 2;
+    test_vector[3] = 3;
+    test_vector[4] = 10;
+    test_vector[5] = 30;
+    test_vector[6] = 1000000000000;
+    test_vector[7] = 2000000000000;
+    test_vector[8] = 3000000000000;
+    test_vector[9] = 18446744073709551615UL;
+
+    int i;
+    int j;
+    unsigned long x;
+    unsigned long y;
+
+    begin_test("test_unsigned_long_operations");
+
+    for(i = 0; i < 10; ++i) {
+        for(j = 0; j < 10; ++j) {
+            x = test_vector[i];
+            y = test_vector[j];
+
+            printf("%lu + %lu = %lu\n", x, y, x + y);
+            printf("%lu - %lu = %lu\n", x, y, x - y);
+            printf("%lu * %lu = %lu\n", x, y, x * y);
+
+            // Can't divide by zero
+            if(y != 0) {
+                printf("%lu / %lu = %lu\n", x, y, x / y);
+                printf("%lu %% %lu = %lu\n", x, y, x % y);
+            }
+
+            printf("%lu << (%lu & 63) = %lu\n", x, y, x << (y & 63));
+            printf("%lu >> (%lu & 63) = %lu\n", x, y, x >> (y & 63));
+
+            printf("%lu & %lu = %lu\n", x, y, x & y);
+            printf("%lu | %lu = %lu\n", x, y, x | y);
+            printf("%lu ^ %lu = %lu\n", x, y, x ^ y);
+
+            printf("%lu > %lu = %d\n", x, y, x > y);
+            printf("%lu < %lu = %d\n", x, y, x < y);
+            printf("%lu >= %lu = %d\n", x, y, x >= y);
+            printf("%lu <= %lu = %d\n", x, y, x <= y);
+            printf("%lu != %lu = %d\n", x, y, x != y);
+            printf("%lu == %lu = %d\n", x, y, x == y);
         }
     }
 }
@@ -290,6 +403,8 @@ int main() {
     test_nested_calls();
     test_signed_integer_operations();
     test_unsigned_integer_operations();
+    test_signed_long_operations();
+    test_unsigned_long_operations();
     test_arrays();
     test_pointers();
 
