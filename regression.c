@@ -270,7 +270,7 @@ void test_unsigned_long_operations() {
     test_vector[5] = 30;
     test_vector[6] = 1000000000000;
     test_vector[7] = 2000000000000;
-    test_vector[8] = 3000000000000;
+    test_vector[8] = 10000000000000000000UL;
     test_vector[9] = 18446744073709551615UL;
 
     int i;

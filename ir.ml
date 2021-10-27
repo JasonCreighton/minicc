@@ -109,6 +109,11 @@ let size_of typ =
     | U32 | I32 -> 32
     | U64 | I64 | Ptr -> 64
 
+let is_signed typ =
+    match typ with
+    | I8 | I16 | I32 | I64 -> true
+    | U8 | U16 | U32 | U64 | Ptr -> false
+
 let logical_not x = UnaryOp (LogicalNot, x)
 
 let zero_extend size x =
@@ -143,11 +148,7 @@ let eval_unaryop typ op x =
     limit_width typ full_width_result
 
 let eval_binop typ op x y =
-    let signed =
-        match typ with
-        | I8 | I16 | I32 | I64 -> true
-        | U8 | U16 | U32 | U64 | Ptr -> false
-    in
+    let signed = is_signed typ in
     let cmp = if signed then Int64.compare x y else Int64.unsigned_compare x y in
     let full_width_result = match op with
     | Add -> Int64.add x y

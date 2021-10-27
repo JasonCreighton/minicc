@@ -142,25 +142,30 @@ let emit_func func_table lit_table ir_func =
             assert (lhs_t = rhs_t);
             asm "pop rcx";
 
-            (* FIXME: Handle unsigned cases properly *)
-            (
-            match op with
+            let signed = Ir.is_signed lhs_t in
+            (match op with
             | Ir.Add -> asm "add rax, rcx"
             | Ir.Sub -> asm "sub rax, rcx"
             | Ir.Mul -> asm "imul rax, rcx"
-            | Ir.Div -> asm "cqo"; asm "idiv rcx"
-            | Ir.Rem -> asm "cqo"; asm "idiv rcx"; asm "mov rax, rdx"
+            | Ir.Div ->
+                if signed
+                then (asm "cqo"; asm "idiv rcx")
+                else (asm "xor edx, edx"; asm "div rcx")
+            | Ir.Rem ->
+                if signed
+                then (asm "cqo"; asm "idiv rcx"; asm "mov rax, rdx")
+                else (asm "xor edx, edx"; asm "div rcx"; asm "mov rax, rdx")
             | Ir.And -> asm "and rax, rcx"
             | Ir.Or -> asm "or rax, rcx"
             | Ir.Xor -> asm "xor rax, rcx"
             | Ir.ShiftLeft -> asm "sal rax, cl"
-            | Ir.ShiftRight -> asm "sar rax, cl"
+            | Ir.ShiftRight -> asmf "%s rax, cl" (if signed then "sar" else "shr")
             | Ir.CompEQ -> materialize_comparison "e"
             | Ir.CompNEQ -> materialize_comparison "ne"
-            | Ir.CompLT -> materialize_comparison "l"
-            | Ir.CompLTE -> materialize_comparison "le"
-            | Ir.CompGT -> materialize_comparison "g"
-            | Ir.CompGTE -> materialize_comparison "ge"
+            | Ir.CompLT -> materialize_comparison (if signed then "l" else "b")
+            | Ir.CompLTE -> materialize_comparison (if signed then "le" else "be")
+            | Ir.CompGT -> materialize_comparison (if signed then "g" else "a")
+            | Ir.CompGTE -> materialize_comparison (if signed then "ge" else "ae")
             );
 
             (* Sign or zero extend as appropriate *)
