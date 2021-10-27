@@ -15,6 +15,7 @@
 %token BITXOR BITOR
 %token LOGICALAND
 %token LOGICALOR
+%token LOGICALNOT
 %token ADDRESSOF
 %token QUESTIONMARK
 %token COLON
@@ -147,6 +148,7 @@ p1_expr
 
 p2_expr
   : p1_expr { $1 }
+  | LOGICALNOT p2_expr { Ast.UnaryOp (Ast.LogicalNot, $2) }
   | TIMES p2_expr { Ast.Deref $2 }
   | AMPERSAND p2_expr { Ast.UnaryOp (Ast.AddressOf, $2) }
   | PLUSPLUS p2_expr { Ast.UnaryOp (Ast.PreInc, $2) }
