@@ -324,6 +324,20 @@ void test_unsigned_long_operations() {
     }
 }
 
+void test_variable_scope() {
+    begin_test("test_variable_scope");
+
+    int x = 42;
+
+    printf("x = %d\n", x);
+
+    {
+        long x = 1234;
+        printf("x = %ld\n", x);
+    }
+
+    printf("x = %d\n", x);
+}
 
 void test_arrays() {
     int ary[10];
@@ -417,6 +431,7 @@ int main() {
     test_unsigned_integer_operations();
     test_signed_long_operations();
     test_unsigned_long_operations();
+    test_variable_scope();
     test_arrays();
     test_pointers();
 

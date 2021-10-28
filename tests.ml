@@ -11,5 +11,7 @@ let run_all () =
     
     should_not_compile "Assignment to constant" "2 = 2;";
     should_not_compile "Assignment to undeclared variable" "int x; y = 7;";
+    should_not_compile "Reference undeclared variable" "x;";
+    should_not_compile "Declare same variable twice in same scope" "int x; int x;";
 
     print_string "Tests passed.\n"

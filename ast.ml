@@ -81,6 +81,15 @@ and expr =
     | LogicalOr of expr * expr 
     | Call of string * expr list
 
+let rec scope_lookup_opt list_of_tbls key =
+    match list_of_tbls with
+    | [] -> None
+    | tbl :: tbls -> begin
+        match Hashtbl.find_opt tbl key with
+        | None -> scope_lookup_opt tbls key
+        | Some _ as found -> found
+    end
+
 let sizeof_int int_size =
     match int_size with
     | Char -> 1
@@ -147,7 +156,7 @@ let ctype_for_integer_literal n (flags : IntLitFlags.t) =
 let func_to_ir _ _ func_params func_body =
     let locals = ref [] in
     let insts = ref [] in
-    let var_table = Hashtbl.create 100 in
+    let scopes = ref [Hashtbl.create 16] in
     let next_label_id = ref 0 in
     let next_local_id = ref 0 in
 
@@ -162,14 +171,17 @@ let func_to_ir _ _ func_params func_body =
         local_id
     in
     let decl_var ctype v =
+        if Hashtbl.mem (List.hd !scopes) v then raise (Compile_error (sprintf "Variable declared twice in same scope: '%s'" v));
         (* Record in variable table *)
-        Hashtbl.add var_table v (new_local ctype, ctype)
+        Hashtbl.add (List.hd !scopes) v (new_local ctype, ctype)
     in
     let find_var_loc v =
-        match Hashtbl.find_opt var_table v with
+        match scope_lookup_opt !scopes v with
         | Some loc -> loc
         | None -> raise (Compile_error (sprintf "Undeclared variable '%s'" v))
     in
+    let begin_scope () = scopes := Hashtbl.create 16 :: !scopes in
+    let end_scope () = scopes := List.tl !scopes in
 
     (* Mutually recursive functions to walk AST *)
     let rec address_of_lvalue expr =
@@ -246,7 +258,11 @@ let func_to_ir _ _ func_params func_body =
         | DeclVar (ctype, v) -> decl_var ctype v
         | DeclAssign (ctype, v, expr) -> decl_var ctype v; assign_var v expr |> ignore
         | ExprStmt expr -> emit_expr expr |> ignore
-        | CompoundStmt stmts -> List.iter emit_stmt stmts
+        | CompoundStmt stmts -> begin
+            begin_scope ();
+            List.iter emit_stmt stmts;
+            end_scope ();
+        end
         | IfElseStmt (cond, then_stmt, else_stmt) -> begin
             let else_label_id = new_label () in
             let done_label_id = new_label () in
@@ -259,7 +275,11 @@ let func_to_ir _ _ func_params func_body =
             add_inst @@ Ir.Label done_label_id;
         end
         | WhileStmt (cond, body) -> emit_loop Option.none cond Option.none body
-        | ForStmt (init, cond, incr, body) -> emit_loop (Option.some init) cond (Option.some incr) body
+        | ForStmt (init, cond, incr, body) -> begin
+            begin_scope ();
+            emit_loop (Option.some init) cond (Option.some incr) body;
+            end_scope ();
+        end
         | ReturnStmt expr_opt ->
             add_inst @@ Ir.Return (Option.map (fun e -> emit_expr e |> snd) expr_opt)
     and emit_expr expr =
@@ -354,7 +374,7 @@ let func_to_ir _ _ func_params func_body =
             end
     in
     (* Put arguments into var_table *)
-    List.iteri (fun i (ctype, arg_name) -> Hashtbl.add var_table arg_name (-(i + 1), ctype)) func_params;
+    List.iteri (fun i (ctype, arg_name) -> Hashtbl.add (List.hd !scopes) arg_name (-(i + 1), ctype)) func_params;
 
     emit_stmt func_body;
     { Ir.insts = List.rev !insts; Ir.locals = !locals; }
