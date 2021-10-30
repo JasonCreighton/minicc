@@ -1,6 +1,8 @@
 %token <int64 * Ast.IntLitFlags.t> LITERAL_INT
 %token <string> IDENTIFIER
 %token <string> LITERAL_STRING
+%token <float> LITERAL_DOUBLE
+%token <float> LITERAL_FLOAT
 %token VOID
 %token CONST
 %token CHAR SHORT INT LONG
@@ -132,6 +134,8 @@ statement
 /* Precedence taken from here: https://en.cppreference.com/w/c/language/operator_precedence */
 p0_expr
   : LITERAL_INT             { let n, flags = $1 in Ast.Lit (n, flags) }
+  | LITERAL_DOUBLE          { Ast.LitDouble $1 }
+  | LITERAL_FLOAT           { Ast.LitFloat $1 }
   | LITERAL_STRING          { Ast.LitString $1 }
   | IDENTIFIER              { Ast.VarRef $1 }
   | LPAREN expr RPAREN      { $2 }

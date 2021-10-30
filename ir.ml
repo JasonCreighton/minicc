@@ -17,6 +17,8 @@ type datatype =
     | I32
     | U64
     | I64
+    | F32
+    | F64
 
 type binop =
     | Add
@@ -46,6 +48,7 @@ type expr =
     | UnaryOp of unaryop * expr
     | ConvertTo of datatype * expr
     | ConstInt of datatype * int64
+    | ConstFloat of datatype * float
     | ConstStringAddr of string
     | Load of datatype * expr
     | LocalAddr of local_id
@@ -72,12 +75,15 @@ let int64_of_bool b = if b then 1L else 0L
 
 let rec typecheck_expr expr =
     match expr with
-    | BinOp (_, lhs, rhs) -> begin
+    | BinOp (op, lhs, rhs) -> begin
         let lhs_t = typecheck_expr lhs in
         let rhs_t = typecheck_expr rhs in
         if lhs_t <> rhs_t then raise (Type_error "BinOp operands must have matching type");
-        lhs_t
+        match op with
+        | CompEQ | CompNEQ | CompLT | CompLTE | CompGT | CompGTE -> I32 (* Compare operators always yield I32 *)
+        | _ -> lhs_t (* Most operators yield the type of the operands *)
     end
+    | UnaryOp (LogicalNot, e) -> typecheck_expr e |> ignore; I32
     | UnaryOp (_, e) -> typecheck_expr e
     | Load (typ, addr) -> begin
         let addr_t = typecheck_expr addr in

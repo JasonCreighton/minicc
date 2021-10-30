@@ -168,8 +168,13 @@ let emit_func func_table lit_table ir_func =
             | Ir.CompGTE -> materialize_comparison (if signed then "ge" else "ae")
             );
 
+            let result_t = match op with
+                | Ir.CompEQ | Ir.CompNEQ | Ir.CompLT | Ir.CompLTE | Ir.CompGT | Ir.CompGTE -> Ir.I32
+                | _ -> lhs_t
+            in
+
             (* Sign or zero extend as appropriate *)
-            (match lhs_t with
+            (match result_t with
             | Ir.I8 -> asm "movsx rax, al"
             | Ir.I16 -> asm "movsx rax, ax"
             | Ir.I32 -> asm "movsx rax, eax"
@@ -179,7 +184,7 @@ let emit_func func_table lit_table ir_func =
             | Ir.I64 | Ir.U64 | Ir.Ptr -> ()
             );
 
-            lhs_t
+            result_t
         end
         | Ir.UnaryOp (op, e) -> begin
             match op with
@@ -190,7 +195,7 @@ let emit_func func_table lit_table ir_func =
                 asm "test rax, rax";
                 asm "sete al";
                 asm "movzx rax, al";
-                typ
+                Ir.I32
             end
         end
         | Ir.ConvertTo (typ, e) -> emit_expr e |> ignore; typ

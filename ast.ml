@@ -66,6 +66,8 @@ and stmt =
     | ReturnStmt of expr option
 and expr =
     | Lit of int64 * IntLitFlags.t
+    | LitDouble of float
+    | LitFloat of float
     | LitString of string
     | Assign of expr * expr
     | VarRef of string
@@ -117,9 +119,13 @@ let ir_datatype_for_ctype ctype =
     | Signed Long -> Ir.I64
     | Unsigned Long -> Ir.U64
     | PointerTo _ -> Ir.Ptr
+    | Double -> Ir.F64
+    | Float -> Ir.F32
 
-let binop_result_ctype lhs_ctype rhs_ctype =
+let binop_common_ctype lhs_ctype rhs_ctype =
     match lhs_ctype, rhs_ctype with
+    | Double, _ | _, Double -> Double
+    | Float, _ | Float, _ -> Float
     | _ when sizeof lhs_ctype < 4 && sizeof rhs_ctype < 4 -> Signed Int (* Always promote to at least an int *)
     | _ when lhs_ctype = rhs_ctype -> lhs_ctype (* No conversion necessary *)
     | (Signed lhs_size as lhs_t), (Signed rhs_size as rhs_t) | (Unsigned lhs_size as lhs_t), (Unsigned rhs_size as rhs_t) ->
@@ -287,6 +293,8 @@ let func_to_ir _ _ func_params func_body =
         | Lit (n, flags) ->
             let ctype = ctype_for_integer_literal n flags in
             (ctype, Ir.ConstInt(ir_datatype_for_ctype ctype, n))
+        | LitDouble n -> (Double, Ir.ConstFloat (Ir.F64, n))
+        | LitFloat n -> (Float, Ir.ConstFloat (Ir.F32, n))
         | LitString s -> (PointerTo (Unsigned Char), Ir.ConstStringAddr s)
         | Assign (VarRef v, rhs) -> assign_var v rhs
         | Assign (lvalue, rhs) -> begin
@@ -307,12 +315,16 @@ let func_to_ir _ _ func_params func_body =
         | BinOp (op, e1, e2) -> begin
             let e1_ctype, e1_ir = emit_expr e1 in
             let e2_ctype, e2_ir = emit_expr e2 in
-            let result_ctype = binop_result_ctype e1_ctype e2_ctype in
-            let result_irtype = ir_datatype_for_ctype result_ctype in
+            let operand_ctype = binop_common_ctype e1_ctype e2_ctype in
+            let result_ctype = match op with
+                | CompEQ | CompNEQ | CompLT | CompLTE | CompGT | CompGTE -> Signed Int
+                | _ -> operand_ctype
+            in
+            let operand_irtype = ir_datatype_for_ctype operand_ctype in
             let e1_irtype = ir_datatype_for_ctype e1_ctype in
             let e2_irtype = ir_datatype_for_ctype e2_ctype in
-            let e1_ir = Ir.convert result_irtype e1_irtype e1_ir in
-            let e2_ir = Ir.convert result_irtype e2_irtype e2_ir in
+            let e1_ir = Ir.convert operand_irtype e1_irtype e1_ir in
+            let e2_ir = Ir.convert operand_irtype e2_irtype e2_ir in
 
             let result_ir = match op with
             | Add -> Ir.BinOp (Ir.Add, e1_ir, e2_ir)
@@ -342,7 +354,7 @@ let func_to_ir _ _ func_params func_body =
             | PostInc -> inc_or_dec true 1 e
             | PostDec -> inc_or_dec true (-1) e
             | BitNot -> let ctype, e_ir = emit_expr e in (ctype, Ir.UnaryOp (Ir.Not, e_ir))
-            | LogicalNot -> let ctype, e_ir = emit_expr e in (ctype, Ir.logical_not e_ir)
+            | LogicalNot -> let ctype, e_ir = emit_expr e in (Signed Int, Ir.logical_not e_ir)
             | Neg -> let ctype, e_ir = emit_expr e in (ctype, Ir.UnaryOp (Ir.Neg, e_ir))
             | AddressOf -> let ctype, e_ir = address_of_lvalue e in (PointerTo ctype, e_ir)
         end
@@ -389,11 +401,14 @@ let build_func_table decl_list =
 
     func_table
 
-let test_binop_result_ctype () = begin
-    assert ((binop_result_ctype (Signed Char) (Signed Char)) = Signed Int);
-    assert ((binop_result_ctype (Signed Int) (Unsigned Int)) = Unsigned Int);
-    assert ((binop_result_ctype (Signed Long) (Unsigned Int)) = Signed Long);
-    assert ((binop_result_ctype (Signed Long) (Unsigned Long)) = Unsigned Long);
+let test_binop_common_ctype () = begin
+    assert ((binop_common_ctype (Signed Char) (Signed Char)) = Signed Int);
+    assert ((binop_common_ctype (Signed Int) (Unsigned Int)) = Unsigned Int);
+    assert ((binop_common_ctype (Signed Long) (Unsigned Int)) = Signed Long);
+    assert ((binop_common_ctype (Signed Long) (Unsigned Long)) = Unsigned Long);
+    assert ((binop_common_ctype (Double) (Signed Int)) = Double);
+    assert ((binop_common_ctype (Double) (Float)) = Double);
+    assert ((binop_common_ctype (Float) (Signed Long)) = Float);
 end
 
 let test_ctype_for_integer_literal () = begin
@@ -407,6 +422,6 @@ let test_ctype_for_integer_literal () = begin
 end
 
 let tests () = begin
-    test_binop_result_ctype ();
+    test_binop_common_ctype ();
     test_ctype_for_integer_literal ();
 end
