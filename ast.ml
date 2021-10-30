@@ -121,11 +121,12 @@ let ir_datatype_for_ctype ctype =
     | PointerTo _ -> Ir.Ptr
     | Double -> Ir.F64
     | Float -> Ir.F32
+    | Void | ArrayOf _ -> failwith "Can't convert ctype to irtype"
 
 let binop_common_ctype lhs_ctype rhs_ctype =
     match lhs_ctype, rhs_ctype with
     | Double, _ | _, Double -> Double
-    | Float, _ | Float, _ -> Float
+    | Float, _ | _, Float -> Float
     | _ when sizeof lhs_ctype < 4 && sizeof rhs_ctype < 4 -> Signed Int (* Always promote to at least an int *)
     | _ when lhs_ctype = rhs_ctype -> lhs_ctype (* No conversion necessary *)
     | (Signed lhs_size as lhs_t), (Signed rhs_size as rhs_t) | (Unsigned lhs_size as lhs_t), (Unsigned rhs_size as rhs_t) ->
@@ -140,6 +141,7 @@ let binop_common_ctype lhs_ctype rhs_ctype =
         if sizeof_int unsigned_size >= sizeof_int signed_size
         then Unsigned unsigned_size
         else Signed signed_size
+    | _, _ -> failwith "Unexpected binop types"
 
 let ctype_for_integer_literal n (flags : IntLitFlags.t) =
     let fits_int = Int64.unsigned_compare n (Int64.shift_left 1L 31) < 0 in
@@ -194,13 +196,18 @@ let func_to_ir _ _ func_params func_body =
         match expr with
         | VarRef v -> let local_id, ctype = find_var_loc v in (ctype, Ir.LocalAddr local_id)
         | Subscript (ary, idx) -> begin
-            let (ArrayOf (elem_ctype, _), addr_ir) = address_of_lvalue ary in
-            let _, idx_ir = emit_expr idx in
-            (elem_ctype, Ir.BinOp (Ir.Add, addr_ir, Ir.BinOp (Ir.Mul, Ir.ConvertTo (Ir.Ptr, idx_ir), Ir.ConstInt (Ir.Ptr, Int64.of_int (sizeof elem_ctype)))))
+            match address_of_lvalue ary with
+            | ArrayOf (elem_ctype, _), addr_ir -> begin                
+                let _, idx_ir = emit_expr idx in
+                (elem_ctype, Ir.BinOp (Ir.Add, addr_ir, Ir.BinOp (Ir.Mul, Ir.ConvertTo (Ir.Ptr, idx_ir), Ir.ConstInt (Ir.Ptr, Int64.of_int (sizeof elem_ctype)))))
+            end
+            | _ -> failwith "Expected target of subscript to be array type"
         end
-        | Deref addr_expr ->
-            let (PointerTo ctype, addr_ir) = address_of_lvalue addr_expr in
-            (ctype, Ir.Load (Ir.Ptr, addr_ir))
+        | Deref addr_expr -> begin
+            match address_of_lvalue addr_expr with
+            | PointerTo ctype, addr_ir -> (ctype, Ir.Load (Ir.Ptr, addr_ir))
+            | _ -> failwith "Expected target of deference to be pointer type"
+        end
         | _ -> raise (Compile_error "expr is not an lvalue")
     and assign_var v expr =
         let local_id, ctype = find_var_loc v in
@@ -225,8 +232,7 @@ let func_to_ir _ _ func_params func_body =
             (ctype, Ir.BinOp (Ir.Add, (Ir.Load (ir_datatype, Ir.LocalAddr local_id)), Ir.ConstInt (ir_datatype, Int64.of_int adj)))
         end
         | Subscript (_, _) -> failwith "TODO: Implement array inc/dec"
-        (* TODO: This is a ugly way to clear the fragile pattern match warning *)
-        |Lit _|LitString _|Assign (_, _)|BinOp (_, _, _)|UnaryOp (_, _)|Conditional (_, _, _)|Sequence (_, _)|LogicalAnd (_, _)|LogicalOr (_, _)|Call (_, _) -> raise (Compile_error "Pre-Increment/Decrement of non-lvalue")
+        | _ -> raise (Compile_error "Pre-Increment/Decrement of non-lvalue")
     and emit_loop init_opt cond incr_opt body = begin
         let test_label_id = new_label () in
         let end_label_id = new_label () in
@@ -311,7 +317,11 @@ let func_to_ir _ _ func_params func_body =
             let elem_ctype, addr_ir = address_of_lvalue expr in
             (elem_ctype, Ir.Load (ir_datatype_for_ctype elem_ctype, addr_ir))
         end
-        | Deref e -> let (PointerTo ctype, addr_ir) = emit_expr e in (ctype, Ir.Load (ir_datatype_for_ctype ctype, addr_ir))
+        | Deref e -> begin
+            match emit_expr e with
+            | PointerTo ctype, addr_ir -> (ctype, Ir.Load (ir_datatype_for_ctype ctype, addr_ir))
+            | _, _ -> failwith "Expected pointer type when dereferencing"
+        end
         | BinOp (op, e1, e2) -> begin
             let e1_ctype, e1_ir = emit_expr e1 in
             let e2_ctype, e2_ir = emit_expr e2 in

@@ -91,7 +91,7 @@ let rec typecheck_expr expr =
         typ
     end
     | ConvertTo (typ, e) -> typecheck_expr e |> ignore; typ
-    | ConstInt (typ, _) -> typ
+    | ConstInt (typ, _) | ConstFloat (typ, _) -> typ
     | ConstStringAddr _ | LocalAddr _ -> Ptr
 
 let typecheck_inst inst =
@@ -107,18 +107,11 @@ let typecheck_inst inst =
     | Return None -> ()
     | Label _ | Jump _ | JumpIf _ -> ()
 
-
-let size_of typ =
-    match typ with
-    | U8  | I8  -> 8
-    | U16 | I16 -> 16
-    | U32 | I32 -> 32
-    | U64 | I64 | Ptr -> 64
-
 let is_signed typ =
     match typ with
     | I8 | I16 | I32 | I64 -> true
     | U8 | U16 | U32 | U64 | Ptr -> false
+    | F32 | F64 -> failwith "Unexpected float type in integer context"
 
 let logical_not x = UnaryOp (LogicalNot, x)
 
@@ -144,6 +137,7 @@ let limit_width typ x =
     | I32 -> sign_extend 32 x
     | I64 -> sign_extend 64 x
     | Ptr -> zero_extend 64 x
+    | F32 | F64 -> failwith "Unexpected float type in integer context"
 
 let eval_unaryop typ op x =
     let full_width_result = match op with
@@ -187,7 +181,7 @@ let convert to_type from_type expr =
 
 let rec normalize e =
     match e with
-    | ConstInt _ | ConstStringAddr _ | LocalAddr _ -> e (* Already normalized *)
+    | ConstInt _ | ConstFloat _ | ConstStringAddr _ | LocalAddr _ -> e (* Already normalized *)
     | UnaryOp (op, nonnormal_expr) -> begin
         let e1 = normalize nonnormal_expr in
         match op, e1 with

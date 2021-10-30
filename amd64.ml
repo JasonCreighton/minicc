@@ -191,7 +191,7 @@ let emit_func func_table lit_table ir_func =
             | Ir.Not -> let typ = emit_expr e in asm "not rax"; typ
             | Ir.Neg -> let typ = emit_expr e in asm "neg rax"; typ
             | Ir.LogicalNot -> begin
-                let typ = emit_expr e in
+                let _ = emit_expr e in
                 asm "test rax, rax";
                 asm "sete al";
                 asm "movzx rax, al";
