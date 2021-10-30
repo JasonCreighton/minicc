@@ -79,6 +79,12 @@ let rec typecheck_expr expr =
         let lhs_t = typecheck_expr lhs in
         let rhs_t = typecheck_expr rhs in
         if lhs_t <> rhs_t then raise (Type_error "BinOp operands must have matching type");
+
+        (match lhs_t, op with
+        | (F32 | F64), (Rem | And | Or | Xor | ShiftLeft | ShiftRight) -> raise (Type_error "Bitwise operators not supported on floating point numbers")
+        | _, _ -> ()
+        );
+
         match op with
         | CompEQ | CompNEQ | CompLT | CompLTE | CompGT | CompGTE -> I32 (* Compare operators always yield I32 *)
         | _ -> lhs_t (* Most operators yield the type of the operands *)
@@ -112,6 +118,11 @@ let is_signed typ =
     | I8 | I16 | I32 | I64 -> true
     | U8 | U16 | U32 | U64 | Ptr -> false
     | F32 | F64 -> failwith "Unexpected float type in integer context"
+
+let is_integer typ =
+    match typ with
+    | I8 | I16 | I32 | I64 | U8 | U16 | U32 | U64 | Ptr -> true
+    | F32 | F64 -> false
 
 let logical_not x = UnaryOp (LogicalNot, x)
 
@@ -208,8 +219,13 @@ let rec normalize e =
     | Load (typ, nonnormal_expr) -> Load (typ, normalize nonnormal_expr)
     | ConvertTo (typ, nonnormal_expr) -> ConvertTo (typ, normalize nonnormal_expr)
 
+let assert_raises_type_error f =
+    try
+        f ();
+        failwith "Expected type error"
+    with Type_error _ -> ()
 
-let tests () =
+let test_normalize () = begin
     assert ((normalize (BinOp (Add, ConstInt (I64, 2L), ConstInt (I64, 2L)))) = ConstInt (I64, 4L));
     assert ((normalize (BinOp (Mul, ConstInt (I64, 5L), ConstInt (I64, 6L)))) = ConstInt (I64, 30L));
     assert ((normalize (BinOp (And, ConstInt (I64, 10L), LocalAddr 0))) = (BinOp (And, LocalAddr 0, ConstInt (I64, 10L))));
@@ -223,3 +239,15 @@ let tests () =
     assert ((normalize (BinOp (Add, ConstInt (U8, 255L), ConstInt (U8, 1L)))) = ConstInt (U8, 0L));
     assert ((normalize (BinOp (Add, ConstInt (U16, 65535L), ConstInt (U16, 1L)))) = ConstInt (U16, 0L));
     assert ((normalize (BinOp (Add, ConstInt (I32, -2147483648L), ConstInt (I32, -1L)))) = ConstInt (I32, 2147483647L));
+end
+
+let test_typecheck_expr () = begin
+    assert_raises_type_error (fun () -> typecheck_expr (BinOp (Add, ConstInt (I32, 0L), ConstInt (I64, 1L))));
+    assert_raises_type_error (fun () -> typecheck_expr (BinOp (Add, ConstFloat (F32, 2.0), ConstInt (I64, 1L))));
+    assert_raises_type_error (fun () -> typecheck_expr (BinOp (Xor, ConstFloat (F64, 2.0), ConstFloat (F64, 5.0))));
+end
+
+let tests () = begin
+    test_normalize ();
+    test_typecheck_expr ();
+end

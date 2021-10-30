@@ -2,7 +2,8 @@ open Printf
 
 exception Compile_error of string
 
-let call_registers = ["rdi"; "rsi"; "rdx"; "rcx"; "r8"; "r9"]
+let integer_call_registers = [|"rdi"; "rsi"; "rdx"; "rcx"; "r8"; "r9"|]
+let float_call_registers = [|"xmm0"; "xmm1"; "xmm2"; "xmm3"; "xmm4"; "xmm5"; "xmm6"; "xmm7"|]
 
 let id_of_string_lit lit_table s =
     match Hashtbl.find_opt lit_table s with
@@ -37,6 +38,12 @@ let acc_reg_name typ =
     | Ir.U16 | Ir.I16 -> "ax"
     | Ir.U32 | Ir.I32 -> "eax"
     | Ir.U64 | Ir.I64 | Ir.Ptr -> "rax"
+    | Ir.F32 | Ir.F64 -> "xmm0"
+
+let scratch_reg_name typ =
+    match typ with
+    | Ir.U8 | Ir.I8 | Ir.U16 | Ir.I16 | Ir.U32 | Ir.I32 | Ir.U64 | Ir.I64 | Ir.Ptr -> "rcx"
+    | Ir.F32 | Ir.F64 -> "xmm1"
 
 let emit_func func_table lit_table ir_func =
     (* Variables *)
@@ -59,21 +66,46 @@ let emit_func func_table lit_table ir_func =
             | Some loc -> loc
             | None -> raise (Compile_error (sprintf "Undeclared local %d" local_id))
     in
+    let materialize_comparison typ condition_code = begin
+        (match typ with
+        | Ir.F32 -> asm "comiss xmm0, xmm1"
+        | Ir.F64 -> asm "comisd xmm0, xmm1"
+        | _ -> asm "cmp rax, rcx"
+        );
+
+        asmf "set%s al" condition_code;
+        asm "movzx rax, al"
+    end in
+    let push_acc typ = begin
+        if Ir.is_integer typ
+        then asm "push rax"
+        else (asm "sub rsp, 8"; asm "movsd [rsp], xmm0")
+    end in
+    let pop typ dest = begin
+        if Ir.is_integer typ
+        then asmf "pop %s" dest
+        else (asmf "movsd %s, [rsp]" dest; asm "add rsp, 8")
+    end in
 
     (* Recursive walk functions *)    
     let rec emit_inst inst =
         match inst with
-        | Ir.Store (_, address, value) -> begin
+        | Ir.Store (store_typ, address, value) -> begin
             let address_typ = emit_expr address in
             if address_typ <> Ir.Ptr then raise (Compile_error "Address type is not Ptr");
             asm "push rax";
             let value_typ = emit_expr value in
+            assert (store_typ = value_typ);
             asm "pop rbx";
-            asmf "mov [rbx], %s" (acc_reg_name value_typ)
+            (match value_typ with
+            | Ir.F64 -> asm "movsd [rbx], xmm0"
+            | Ir.F32 -> asm "movss [rbx], xmm0"
+            | _ -> asmf "mov [rbx], %s" (acc_reg_name value_typ)
+            );
         end
         | Ir.Call (dest, func_name, arguments) -> begin
             (* Evaluate arguments onto stack *)
-            List.iter (fun a -> emit_expr a |> ignore; asm "push rax") (List.rev arguments);
+            List.iter (fun a -> push_acc (emit_expr a)) (List.rev arguments);
 
             if Option.is_some (Hashtbl.find_opt func_table func_name) then (
                 (* Call one of our functions *)
@@ -81,7 +113,16 @@ let emit_func func_table lit_table ir_func =
             ) else (
                 (* Library call *)
                 (* Pop stack values into calling convention registers *)
-                List.iteri (fun i reg -> if i < (List.length arguments) then asmf "pop %s" reg else ()) call_registers;
+                let int_idx = ref 0 in
+                let float_idx = ref 0 in
+                List.iteri (fun i arg ->
+                    let arg_t = Ir.typecheck_expr arg in
+                    let dest_reg = match arg_t with
+                    | Ir.F64 | Ir.F32 -> let r = Array.get float_call_registers !float_idx in float_idx := !float_idx + 1; r
+                    | _ -> let r = Array.get integer_call_registers !int_idx in int_idx := !int_idx + 1; r
+                    in
+                    pop arg_t dest_reg
+                ) arguments;
 
                 (* FIXME: Terrible hack to align stack to 16 bytes before calling library function, this should be done statically *)
                 asm "mov rbx, rsp"; (* Save old stack pointer in callee-save register *)
@@ -102,11 +143,100 @@ let emit_func func_table lit_table ir_func =
         end
         | Ir.Return expr_opt ->
             Option.iter (fun e -> emit_expr e |> ignore) expr_opt;
-            asm "jmp .epilogue"    
+            asm "jmp .epilogue"
+    and emit_int_binop op e1 e2 =
+        (*
+        Note: Evaluate RHS first, so we can end up with the LHS in rax.
+        This makes things nicer for subtraction and division.
+        *)
+        let rhs_t = emit_expr e2 in
+        asm "push rax";
+        let lhs_t = emit_expr e1 in
+        assert (lhs_t = rhs_t);
+        asm "pop rcx";
+
+        let signed = Ir.is_signed lhs_t in
+        (match op with
+        | Ir.Add -> asm "add rax, rcx"
+        | Ir.Sub -> asm "sub rax, rcx"
+        | Ir.Mul -> asm "imul rax, rcx"
+        | Ir.Div ->
+            if signed
+            then (asm "cqo"; asm "idiv rcx")
+            else (asm "xor edx, edx"; asm "div rcx")
+        | Ir.Rem ->
+            if signed
+            then (asm "cqo"; asm "idiv rcx"; asm "mov rax, rdx")
+            else (asm "xor edx, edx"; asm "div rcx"; asm "mov rax, rdx")
+        | Ir.And -> asm "and rax, rcx"
+        | Ir.Or -> asm "or rax, rcx"
+        | Ir.Xor -> asm "xor rax, rcx"
+        | Ir.ShiftLeft -> asm "sal rax, cl"
+        | Ir.ShiftRight -> asmf "%s rax, cl" (if signed then "sar" else "shr")
+        | Ir.CompEQ -> materialize_comparison lhs_t "e"
+        | Ir.CompNEQ -> materialize_comparison lhs_t "ne"
+        | Ir.CompLT -> materialize_comparison lhs_t (if signed then "l" else "b")
+        | Ir.CompLTE -> materialize_comparison lhs_t (if signed then "le" else "be")
+        | Ir.CompGT -> materialize_comparison lhs_t (if signed then "g" else "a")
+        | Ir.CompGTE -> materialize_comparison lhs_t (if signed then "ge" else "ae")
+        );
+
+        let result_t = match op with
+            | Ir.CompEQ | Ir.CompNEQ | Ir.CompLT | Ir.CompLTE | Ir.CompGT | Ir.CompGTE -> Ir.I32
+            | _ -> lhs_t
+        in
+
+        (* Sign or zero extend as appropriate *)
+        (match result_t with
+        | Ir.I8 -> asm "movsx rax, al"
+        | Ir.I16 -> asm "movsx rax, ax"
+        | Ir.I32 -> asm "movsx rax, eax"
+        | Ir.U8 -> asm "movzx rax, al"
+        | Ir.U16 -> asm "movzx rax, ax"
+        | Ir.U32 -> asm "mov eax, eax"
+        | Ir.I64 | Ir.U64 | Ir.Ptr -> ()
+        | Ir.F32 | Ir.F64 -> failwith "Shouldn't have float types in emit_int_binop"
+        );
+
+        result_t
+    and emit_float_binop op e1 e2 =
+        let rhs_t = emit_expr e2 in
+        push_acc rhs_t;
+        let lhs_t = emit_expr e1 in
+        assert (lhs_t = rhs_t);
+        pop rhs_t "xmm1";
+
+        let op_suffix = match lhs_t with
+            | Ir.F64 -> "sd"
+            | Ir.F32 -> "ss"
+            | _ -> failwith "Shouldn't have int types in emit_float_binop"
+        in
+        (match op with
+        | Ir.Add -> asmf "add%s xmm0, xmm1" op_suffix
+        | Ir.Sub -> asmf "sub%s xmm0, xmm1" op_suffix
+        | Ir.Mul -> asmf "mul%s xmm0, xmm1" op_suffix
+        | Ir.Div -> asmf "div%s xmm0, xmm1" op_suffix
+        | Ir.CompEQ -> materialize_comparison lhs_t "e"
+        | Ir.CompNEQ -> materialize_comparison lhs_t "ne"
+        | Ir.CompLT -> materialize_comparison lhs_t "b"
+        | Ir.CompLTE -> materialize_comparison lhs_t "be"
+        | Ir.CompGT -> materialize_comparison lhs_t "a"
+        | Ir.CompGTE -> materialize_comparison lhs_t "ae"
+        | Ir.Rem | Ir.And | Ir.Or | Ir.Xor | Ir.ShiftLeft | Ir.ShiftRight -> failwith "Integer operations not allowed in emit_float_binop"
+        );
+
+        let result_t = match op with
+            | Ir.CompEQ | Ir.CompNEQ | Ir.CompLT | Ir.CompLTE | Ir.CompGT | Ir.CompGTE -> Ir.I32
+            | _ -> lhs_t
+        in
+
+        result_t
     and emit_expr expr =
-        (* FIXME *)
         match expr with
         | Ir.ConstInt (typ, n) -> asmf "mov rax, %Ld" n; typ
+        | Ir.ConstFloat (Ir.F64, n) -> asmf "mov rax, %Ld" (Int64.bits_of_float n); asm "movq xmm0, rax"; Ir.F64
+        | Ir.ConstFloat (Ir.F32, n) -> asmf "mov eax, %ld" (Int32.bits_of_float n); asm "movd xmm0, eax"; Ir.F32
+        | Ir.ConstFloat (_, _) -> failwith "Invalid type for ConstFloat"
         | Ir.ConstStringAddr s -> asmf "mov rax, string_lit_%d" (id_of_string_lit lit_table s); Ir.Ptr
         | Ir.LocalAddr local_id -> asmf "lea rax, [rbp + %d]" (find_local_offset local_id); Ir.Ptr
         | Ir.Load (typ, addr) -> begin
@@ -121,84 +251,66 @@ let emit_func func_table lit_table ir_func =
                 | Ir.U16 -> ld "movzx" "rax" "word"
                 | Ir.U32 -> ld "mov" "eax" "dword"
                 | Ir.I64 | Ir.U64 | Ir.Ptr -> ld "mov" "rax" "qword"
+                | Ir.F32 -> ld "movss" "xmm0" "dword"
+                | Ir.F64 -> ld "movsd" "xmm0" "qword"
             );
 
             typ
         end            
         | Ir.BinOp (op, e1, e2) -> begin
-            let materialize_comparison condition_code =
-                asm "cmp rax, rcx";
-                asm "mov rax, 0";
-                asm "mov rcx, 1";
-                asmf "cmov%s rax, rcx" condition_code
-            in
-            (*
-            Note: Evaluate RHS first, so we can end up with the LHS in rax.
-            This makes things nicer for subtraction and division.
-            *)
-            let rhs_t = emit_expr e2 in
-            asm "push rax";
-            let lhs_t = emit_expr e1 in
-            assert (lhs_t = rhs_t);
-            asm "pop rcx";
-
-            let signed = Ir.is_signed lhs_t in
-            (match op with
-            | Ir.Add -> asm "add rax, rcx"
-            | Ir.Sub -> asm "sub rax, rcx"
-            | Ir.Mul -> asm "imul rax, rcx"
-            | Ir.Div ->
-                if signed
-                then (asm "cqo"; asm "idiv rcx")
-                else (asm "xor edx, edx"; asm "div rcx")
-            | Ir.Rem ->
-                if signed
-                then (asm "cqo"; asm "idiv rcx"; asm "mov rax, rdx")
-                else (asm "xor edx, edx"; asm "div rcx"; asm "mov rax, rdx")
-            | Ir.And -> asm "and rax, rcx"
-            | Ir.Or -> asm "or rax, rcx"
-            | Ir.Xor -> asm "xor rax, rcx"
-            | Ir.ShiftLeft -> asm "sal rax, cl"
-            | Ir.ShiftRight -> asmf "%s rax, cl" (if signed then "sar" else "shr")
-            | Ir.CompEQ -> materialize_comparison "e"
-            | Ir.CompNEQ -> materialize_comparison "ne"
-            | Ir.CompLT -> materialize_comparison (if signed then "l" else "b")
-            | Ir.CompLTE -> materialize_comparison (if signed then "le" else "be")
-            | Ir.CompGT -> materialize_comparison (if signed then "g" else "a")
-            | Ir.CompGTE -> materialize_comparison (if signed then "ge" else "ae")
-            );
-
-            let result_t = match op with
-                | Ir.CompEQ | Ir.CompNEQ | Ir.CompLT | Ir.CompLTE | Ir.CompGT | Ir.CompGTE -> Ir.I32
-                | _ -> lhs_t
-            in
-
-            (* Sign or zero extend as appropriate *)
-            (match result_t with
-            | Ir.I8 -> asm "movsx rax, al"
-            | Ir.I16 -> asm "movsx rax, ax"
-            | Ir.I32 -> asm "movsx rax, eax"
-            | Ir.U8 -> asm "movzx rax, al"
-            | Ir.U16 -> asm "movzx rax, ax"
-            | Ir.U32 -> asm "mov eax, eax"
-            | Ir.I64 | Ir.U64 | Ir.Ptr -> ()
-            );
-
-            result_t
+            if Ir.is_integer (Ir.typecheck_expr e1)
+            then emit_int_binop op e1 e2
+            else emit_float_binop op e1 e2
         end
         | Ir.UnaryOp (op, e) -> begin
             match op with
             | Ir.Not -> let typ = emit_expr e in asm "not rax"; typ
-            | Ir.Neg -> let typ = emit_expr e in asm "neg rax"; typ
+            | Ir.Neg -> begin
+                let typ = emit_expr e in
+                (* For floats, we have to flip the sign bit rather than
+                subtracting from zero so that negating zero gets negative
+                zero instead of positive zero. *)
+                (match typ with
+                | Ir.F32 -> begin
+                    asmf "mov eax, %ld" (Int32.shift_left 1l 31);
+                    asm "movd xmm1, eax";
+                    asm "xorpd xmm0, xmm1";
+                end
+                | Ir.F64 -> begin
+                    asmf "mov rax, %Ld" (Int64.shift_left 1L 63);
+                    asm "movq xmm1, rax";
+                    asm "xorpd xmm0, xmm1";
+                end
+                | _ -> asm "neg rax"
+                );
+                typ
+            end
             | Ir.LogicalNot -> begin
-                let _ = emit_expr e in
-                asm "test rax, rax";
-                asm "sete al";
-                asm "movzx rax, al";
+                let typ = emit_expr e in
+                (* Zero out xmm1 or rcx *)
+                (match typ with
+                | Ir.F32 | Ir.F64 -> asm "pxor xmm1, xmm1"
+                | _ -> asm "xor rcx, rcx"
+                );
+                (* Compare rax/xmm0 to rcx/xmm1 *)
+                materialize_comparison typ "e";
                 Ir.I32
             end
         end
-        | Ir.ConvertTo (typ, e) -> emit_expr e |> ignore; typ
+        | Ir.ConvertTo (to_t, e) -> begin
+            let from_t = emit_expr e in
+            (match from_t, to_t with
+            | Ir.F32, Ir.F64 -> asm "cvtss2sd xmm0, xmm0"
+            | Ir.F64, Ir.F32 -> asm "cvtsd2ss xmm0, xmm0"
+            | Ir.F32, _ -> asm "cvtss2si rax, xmm0"
+            | Ir.F64, _ -> asm "cvtsd2si rax, xmm0"
+            | _, Ir.F32 -> asm "cvtsi2ss xmm0, rax"
+            | _, Ir.F64 -> asm "cvtsi2sd xmm0, rax"
+            | _, _ -> ()
+            );
+
+            to_t
+        end
     in
     List.iter emit_inst ir_func.Ir.insts;
     (out_buffer, stack_bytes_allocated)

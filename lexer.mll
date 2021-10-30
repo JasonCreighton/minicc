@@ -22,6 +22,8 @@ rule token = parse
   | "long"         { LONG }
   | "signed"       { SIGNED }
   | "unsigned"     { UNSIGNED }
+  | "float"        { FLOAT }
+  | "double"       { DOUBLE }
   | "void"         { VOID }
   | "struct"       { STRUCT }
   | "if"           { IF }
@@ -69,7 +71,7 @@ rule token = parse
   | id as lxm      { IDENTIFIER(lxm) }
   | ("0x" hex+ as lxm) (intsuffix as flags) { LITERAL_INT (Int64.of_string lxm, integer_literal_flags flags)}
   | (digit+ as lxm) (intsuffix as flags) { LITERAL_INT(Int64.of_string ("0u" ^ lxm), Ast.IntLitFlags.decimal lor (integer_literal_flags flags)) }
-  | (digit+ '.' digit '*' ('e' digit+)?) as float_str ('f'?) as suffix {
+  | ((digit+ '.' digit* ('e' '-'? digit+)?) as float_str) ('f'? as suffix) {
     if suffix == "f"
     then LITERAL_FLOAT (Int32.float_of_bits (Int32.bits_of_float (Float.of_string float_str)))
     else LITERAL_DOUBLE (Float.of_string float_str)
