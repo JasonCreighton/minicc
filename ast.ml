@@ -389,7 +389,12 @@ let func_to_ir _ _ func_params func_body =
         | Call(func_name, args) ->
             begin
                 let result_local_id = new_local (Signed Long) in (* FIXME: Don't hardcode type *)
-                let evaluated_args = List.map (fun e -> emit_expr e |> snd) args in
+                let evaluated_args = List.map (fun e ->
+                    let ctype, arg_ir = emit_expr e in
+                    match ctype with
+                    | Float -> Ir.ConvertTo(Ir.F64, arg_ir) (* FIXME: Hack for printf varargs until we get function arguments checking types in general *)
+                    | _ -> arg_ir
+                ) args in
                 add_inst @@ Ir.Call (Some (Ir.I64, result_local_id), func_name, evaluated_args);
 
                 (Signed Long, Ir.Load (Ir.I64, Ir.LocalAddr result_local_id)) (* FIXME: Don't hardcode type *)

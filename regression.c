@@ -369,6 +369,51 @@ void test_double_operations() {
     }
 }
 
+void test_float_operations() {
+    double test_vector[11];
+
+    test_vector[0] = 0.0f;
+    test_vector[1] = 1.0f;
+    test_vector[2] = -1.0f;
+    test_vector[3] = 2.718281828459045f;
+    test_vector[4] = 3.141592653589793f;
+    test_vector[5] = -5.4321f;
+    test_vector[6] = 1.0e9f;
+    test_vector[7] = 1.0e12f;
+    test_vector[8] = -1.0e15f;
+    test_vector[9] = 1.0e35f;
+    test_vector[10] = -1.0e35f;
+
+    int i;
+    int j;
+    float x;
+    float y;
+
+    begin_test("test_double_operations");
+
+    for(i = 0; i < 11; ++i) {
+        x = test_vector[i];
+        printf("!%f = %d\n", x, !x);
+        printf("-%f = %f\n", x, -x);
+
+        for(j = 0; j < 11; ++j) {
+            y = test_vector[j];
+
+            printf("%f + %f = %f\n", x, y, x + y);
+            printf("%f - %f = %f\n", x, y, x - y);
+            printf("%f * %f = %f\n", x, y, x * y);
+            printf("%f / %f = %f\n", x, y, x / y);
+
+            printf("%f > %f = %d\n", x, y, x > y);
+            printf("%f < %f = %d\n", x, y, x < y);
+            printf("%f >= %f = %d\n", x, y, x >= y);
+            printf("%f <= %f = %d\n", x, y, x <= y);
+            printf("%f != %f = %d\n", x, y, x != y);
+            printf("%f == %f = %d\n", x, y, x == y);
+        }
+    }
+}
+
 void test_variable_scope() {
     begin_test("test_variable_scope");
 
@@ -477,6 +522,7 @@ int main() {
     test_signed_long_operations();
     test_unsigned_long_operations();
     test_double_operations();
+    test_float_operations();
     test_variable_scope();
     test_arrays();
     test_pointers();
