@@ -54,7 +54,7 @@ type unaryop =
 
 type decl =
     | Function of ctype * string * (ctype * string) list * stmt
-    | FunctionDecl of ctype * string * (ctype * string) list
+    | FunctionDecl of ctype * string * (ctype * string) list * bool
 and stmt =
     | CompoundStmt of stmt list
     | ExprStmt of expr
@@ -82,6 +82,13 @@ and expr =
     | LogicalAnd of expr * expr
     | LogicalOr of expr * expr 
     | Call of string * expr list
+
+type function_prototype = {
+    name : string;
+    ret_type : ctype;
+    arg_types : ctype list;
+    is_varargs : bool;
+}
 
 let rec scope_lookup_opt list_of_tbls key =
     match list_of_tbls with
@@ -161,7 +168,7 @@ let ctype_for_integer_literal n (flags : IntLitFlags.t) =
     else if fits_ulong && long_okay && unsigned_okay then Unsigned Long
     else failwith "Could not find type for integer literal"
 
-let func_to_ir _ _ func_params func_body =
+let func_to_ir prototype_table _ _ func_params func_body =
     let locals = ref [] in
     let insts = ref [] in
     let scopes = ref [Hashtbl.create 16] in
@@ -233,6 +240,27 @@ let func_to_ir _ _ func_params func_body =
         end
         | Subscript (_, _) -> failwith "TODO: Implement array inc/dec"
         | _ -> raise (Compile_error "Pre-Increment/Decrement of non-lvalue")
+    and eval_arguments is_varargs exprs ctypes =
+        match exprs, ctypes with
+        | [], [] -> []
+        | e :: es, t :: ts -> begin
+            let expr_ctype, expr_ir = emit_expr e in
+            let expr_irtype = ir_datatype_for_ctype expr_ctype in
+            let expected_irtype = ir_datatype_for_ctype t in
+
+            Ir.convert expected_irtype expr_irtype expr_ir :: eval_arguments is_varargs es ts
+        end
+        | e :: es, [] when is_varargs -> begin
+            let expr_ctype, expr_ir = emit_expr e in
+            (* varargs floats are always converted to doubles *)
+            let expr_ir = match expr_ctype with
+            | Float -> Ir.ConvertTo(Ir.F64, expr_ir)
+            | _ -> expr_ir
+            in
+            expr_ir :: eval_arguments is_varargs es []
+        end
+        | _ :: _, [] -> raise (Compile_error "Too many arguments given")
+        | [], _ :: _ -> raise (Compile_error "Not enough arguments given")
     and emit_loop init_opt cond incr_opt body = begin
         let test_label_id = new_label () in
         let end_label_id = new_label () in
@@ -388,16 +416,25 @@ let func_to_ir _ _ func_params func_body =
         | LogicalOr (e1, e2) -> emit_short_circuit_logical_op true e1 e2
         | Call(func_name, args) ->
             begin
-                let result_local_id = new_local (Signed Long) in (* FIXME: Don't hardcode type *)
-                let evaluated_args = List.map (fun e ->
-                    let ctype, arg_ir = emit_expr e in
-                    match ctype with
-                    | Float -> Ir.ConvertTo(Ir.F64, arg_ir) (* FIXME: Hack for printf varargs until we get function arguments checking types in general *)
-                    | _ -> arg_ir
-                ) args in
-                add_inst @@ Ir.Call (Some (Ir.I64, result_local_id), func_name, evaluated_args);
+                (* Lookup function prototype *)
+                let proto = match Hashtbl.find_opt prototype_table func_name with
+                    | Some p -> p
+                    | None -> raise (Compile_error (sprintf "Can't call undeclared function '%s'" func_name))
+                in
+                let result_dest, result_ir = match proto.ret_type with
+                    (* TODO We pretend void has the value 0 because currently
+                    the IR has not way to represent void *)
+                    | Void -> (None, Ir.ConstInt(Ir.I32, 0L))
+                    | _ -> begin
+                        let result_local_id = new_local proto.ret_type in
+                        let result_irtype = ir_datatype_for_ctype proto.ret_type in
+                        (Some (result_irtype, result_local_id), Ir.Load (result_irtype, Ir.LocalAddr result_local_id))
+                    end
+                in
+                let evaluated_args = eval_arguments proto.is_varargs args proto.arg_types in
+                add_inst @@ Ir.Call (result_dest, func_name, evaluated_args);
 
-                (Signed Long, Ir.Load (Ir.I64, Ir.LocalAddr result_local_id)) (* FIXME: Don't hardcode type *)
+                (proto.ret_type, result_ir)
             end
     in
     (* Put arguments into var_table *)
@@ -408,9 +445,21 @@ let func_to_ir _ _ func_params func_body =
 
 let build_func_table decl_list =
     let func_table = Hashtbl.create 64 in
+    let func_prototypes = Hashtbl.create 64 in
+
+    (* Create function prototype table, needed for AST to IR conversion *)
     List.iter (fun d ->
         match d with
-        | Function (ret_ctype, name, params, body) -> Hashtbl.add func_table name (func_to_ir ret_ctype name params body)
+        | Function (ret_type, name, named_params, _) -> Hashtbl.add func_prototypes name
+            { name; ret_type; arg_types=List.map fst named_params; is_varargs=false }
+        | FunctionDecl (ret_type, name, named_params, is_varargs) -> Hashtbl.add func_prototypes name
+            { name; ret_type; arg_types=List.map fst named_params; is_varargs }
+    ) decl_list;
+
+    (* Create table of function IR *)
+    List.iter (fun d ->
+        match d with
+        | Function (ret_ctype, name, params, body) -> Hashtbl.add func_table name (func_to_ir func_prototypes ret_ctype name params body)
         | FunctionDecl _ -> ()
     ) decl_list;
 

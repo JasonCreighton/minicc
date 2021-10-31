@@ -52,20 +52,24 @@ decl_list
 ;
 
 decl
-  : ctype IDENTIFIER function_parameters compound_statement { Ast.Function ($1, $2, List.rev $3, $4) }
-  | EXTERN ctype IDENTIFIER function_parameters SEMICOLON { Ast.FunctionDecl ($2, $3, List.rev $4) }
+  : ctype IDENTIFIER function_parameters compound_statement { Ast.Function ($1, $2, fst $3, $4) }
+  | EXTERN ctype IDENTIFIER function_parameters SEMICOLON { Ast.FunctionDecl ($2, $3, fst $4, snd $4) }
 ;
 
 function_parameters
-  : LPAREN RPAREN { [] }
-  | LPAREN function_parameter_list RPAREN { $2 }
+  : LPAREN RPAREN { ([], false) }
+  | LPAREN function_parameter_list RPAREN { ($2, false) }
+  | LPAREN varargs_function_parameter_list RPAREN { ($2, true) }
 ;
 
 function_parameter_list
   : named_ctype { [$1] }
-  | function_parameter_list COMMA named_ctype { $3 :: $1 }
-  | function_parameter_list COMMA ELLIPSIS { $1 } /* Ignore varargs for now */
+  | named_ctype COMMA function_parameter_list { $1 :: $3 }
 ;
+
+varargs_function_parameter_list
+  : ELLIPSIS { [] }
+  | named_ctype COMMA varargs_function_parameter_list { $1 :: $3 }
 
 named_ctype
   : ctype IDENTIFIER { ($1, $2) }

@@ -9,6 +9,14 @@ void begin_test(const char *test_name) {
     printf("=== %s ===\n", test_name);
 }
 
+void print_double(double x) {
+    printf("print_double(%f)\n", x);
+}
+
+void print_float(float x) {
+    printf("print_float(%f)\n", x);
+}
+
 void test_comments() {
     // Single line comments should be supported
 
@@ -429,6 +437,19 @@ void test_variable_scope() {
     printf("x = %d\n", x);
 }
 
+void test_implicit_function_argument_conversion() {
+    begin_test("test_implicit_function_argument_conversion");
+    
+    print_double(1);
+    print_double(42);
+    print_double(9223372036854775807);
+    print_float(9223372036854775807);
+
+    // TODO: Currently unsigned longs with the MSB set are interpreted
+    // incorrectly as signed when converting to floating point.
+    // print_float(18446744073709551615UL);
+}
+
 void test_arrays() {
     int ary[10];
     int ary_2d[5][10];
@@ -524,6 +545,7 @@ int main() {
     test_double_operations();
     test_float_operations();
     test_variable_scope();
+    test_implicit_function_argument_conversion();
     test_arrays();
     test_pointers();
 
