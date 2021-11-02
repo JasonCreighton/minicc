@@ -500,6 +500,23 @@ void test_trig_functions() {
     }
 }
 
+unsigned long fib(unsigned long n) {
+    if(n < 2) {
+        return n;
+    } else {
+        return fib(n - 2) + fib(n - 1);
+    }
+}
+
+void test_fibonacci() {
+    begin_test("test_fibonacci");
+
+    int i;
+    for(i = 0; i < 20; ++i) {
+        printf("fib(%d) = %lu\n", i, fib(i));
+    }
+}
+
 int main() {
     unsigned char w;
     short x = 42;
@@ -562,6 +579,7 @@ int main() {
     test_arrays();
     test_pointers();
     test_trig_functions();
+    test_fibonacci();
 
     return 0;
 }
