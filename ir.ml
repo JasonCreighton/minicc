@@ -71,6 +71,11 @@ type func = {
     locals : (local_id * local_def) list;
 }
 
+type compilation_unit = {
+    extern_symbols : string list;
+    func_table : (string, func) Hashtbl.t;
+}
+
 let int64_of_bool b = if b then 1L else 0L
 
 let rec typecheck_expr expr =

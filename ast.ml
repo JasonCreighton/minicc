@@ -88,6 +88,7 @@ type function_prototype = {
     ret_type : ctype;
     arg_types : ctype list;
     is_varargs : bool;
+    is_extern : bool;
 }
 
 let rec scope_lookup_opt list_of_tbls key =
@@ -443,7 +444,7 @@ let func_to_ir prototype_table _ _ func_params func_body =
     emit_stmt func_body;
     { Ir.insts = List.rev !insts; Ir.locals = !locals; }
 
-let build_func_table decl_list =
+let to_ir decl_list =
     let func_table = Hashtbl.create 64 in
     let func_prototypes = Hashtbl.create 64 in
 
@@ -451,9 +452,11 @@ let build_func_table decl_list =
     List.iter (fun d ->
         match d with
         | Function (ret_type, name, named_params, _) -> Hashtbl.add func_prototypes name
-            { name; ret_type; arg_types=List.map fst named_params; is_varargs=false }
+            { name; ret_type; arg_types=List.map fst named_params; is_varargs=false; is_extern=false }
         | FunctionDecl (ret_type, name, named_params, is_varargs) -> Hashtbl.add func_prototypes name
-            { name; ret_type; arg_types=List.map fst named_params; is_varargs }
+            (* TODO: A function declaration is not necessarily extern, it
+            might be a forward declaration *)
+            { name; ret_type; arg_types=List.map fst named_params; is_varargs; is_extern=true } 
     ) decl_list;
 
     (* Create table of function IR *)
@@ -463,7 +466,10 @@ let build_func_table decl_list =
         | FunctionDecl _ -> ()
     ) decl_list;
 
-    func_table
+    {
+        Ir.extern_symbols = Hashtbl.fold (fun name proto acc -> if proto.is_extern then name :: acc else acc) func_prototypes [];
+        Ir.func_table;
+    }
 
 let test_binop_common_ctype () = begin
     assert ((binop_common_ctype (Signed Char) (Signed Char)) = Signed Int);

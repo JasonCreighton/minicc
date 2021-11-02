@@ -86,7 +86,12 @@ let emit_func func_table lit_table ir_func =
         then asmf "pop %s" dest
         else (asmf "movsd %s, [rsp]" dest; asm "add rsp, 8")
     end in
-
+    let store_acc typ dest =
+        match typ with
+        | Ir.F64 -> asmf "movsd %s, xmm0" dest
+        | Ir.F32 -> asmf "movss %s, xmm0" dest
+        | _ -> asmf "mov %s, %s" dest (acc_reg_name typ)
+    in
     (* Recursive walk functions *)    
     let rec emit_inst inst =
         match inst with
@@ -97,11 +102,7 @@ let emit_func func_table lit_table ir_func =
             let value_typ = emit_expr value in
             assert (store_typ = value_typ);
             asm "pop rbx";
-            (match value_typ with
-            | Ir.F64 -> asm "movsd [rbx], xmm0"
-            | Ir.F32 -> asm "movss [rbx], xmm0"
-            | _ -> asmf "mov [rbx], %s" (acc_reg_name value_typ)
-            );
+            store_acc value_typ "[rbx]";
         end
         | Ir.Call (dest, func_name, arguments) -> begin
             (* Evaluate arguments onto stack *)
@@ -132,7 +133,7 @@ let emit_func func_table lit_table ir_func =
             );
 
             (* Optionally save result of call to a local *)
-            Option.iter (fun (typ, local_id) -> asmf "mov [rbp + %d], %s" (find_local_offset local_id) (acc_reg_name typ)) dest
+            Option.iter (fun (typ, local_id) -> store_acc typ (sprintf "[rbp + %d]" (find_local_offset local_id))) dest
         end
         | Ir.Label label_id -> asm_rawf ".L%d:\n" label_id
         | Ir.Jump label_id -> asmf "jmp .L%d" label_id
@@ -315,15 +316,15 @@ let emit_func func_table lit_table ir_func =
     List.iter emit_inst ir_func.Ir.insts;
     (out_buffer, stack_bytes_allocated)
 
-let emit func_table =
+let emit ir_comp_unit =
     let lit_table = Hashtbl.create 100 in
     let ob = Buffer.create 4096 in
 
-    Buffer.add_string ob "extern printf\n";
+    List.iter (bprintf ob "extern %s\n") ir_comp_unit.Ir.extern_symbols;
     Buffer.add_string ob "section .text\n";
 
     Hashtbl.iter (fun func_name func_ir -> begin
-        let body_buf, stack_bytes_allocated = emit_func func_table lit_table func_ir in
+        let body_buf, stack_bytes_allocated = emit_func ir_comp_unit.Ir.func_table lit_table func_ir in
 
         bprintf ob "global %s\n" func_name;
         bprintf ob "%s:\n" func_name;
@@ -341,7 +342,7 @@ let emit func_table =
         Buffer.add_string ob "\tpop rbp\n";
         Buffer.add_string ob "\tret\n";
     end
-    ) func_table;
+    ) ir_comp_unit.Ir.func_table;
 
     (* Output string literals *)
     Buffer.add_string ob "section .data\n";

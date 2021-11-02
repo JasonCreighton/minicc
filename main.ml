@@ -21,7 +21,7 @@ let () =
             let in_chan = open_in input_filename in
             let out_chan = open_out output_filename in
 
-            Lexing.from_channel in_chan |> Parser.compilation_unit Lexer.token |> Ast.build_func_table |> Amd64.emit |> Buffer.output_buffer out_chan;
+            Lexing.from_channel in_chan |> Parser.compilation_unit Lexer.token |> Ast.to_ir |> Amd64.emit |> Buffer.output_buffer out_chan;
             
             close_in in_chan;
             close_out out_chan;

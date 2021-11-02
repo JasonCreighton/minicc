@@ -4,6 +4,9 @@
 // overflow.
 
 extern int printf(const char *fmt, ...);
+extern double sin(double x);
+extern double cos(double x);
+extern double pow(double x, double y);
 
 void begin_test(const char *test_name) {
     printf("=== %s ===\n", test_name);
@@ -487,6 +490,16 @@ void test_pointers() {
     printf("x=%d, y=%d, *ptr=%d\n", x, y, *ptr);
 }
 
+void test_trig_functions() {
+    begin_test("test_trig_functions");
+
+    int i;
+    for(i = 0; i < 32; ++i) {
+        double angle = (i / 32.0) * 2.0 * 3.14159265358979312;
+        printf("x = %f, sin(x) = %f, cos(x) = %f\n", angle, sin(angle), cos(angle));
+    }
+}
+
 int main() {
     unsigned char w;
     short x = 42;
@@ -548,6 +561,7 @@ int main() {
     test_implicit_function_argument_conversion();
     test_arrays();
     test_pointers();
+    test_trig_functions();
 
     return 0;
 }

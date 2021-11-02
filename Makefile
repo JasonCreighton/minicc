@@ -40,10 +40,10 @@ build/regression.o: build/regression.asm
 	nasm -felf64 build/regression.asm
 
 build/regression: build/regression.o
-	gcc build/regression.o -o build/regression
+	gcc -lm build/regression.o -o build/regression
 
 build/regression_golden: regression.c
-	gcc -Wall -Werror -fwrapv -fsanitize=undefined regression.c -o build/regression_golden
+	gcc -lm -Wall -Werror -fwrapv -fsanitize=undefined regression.c -o build/regression_golden
 
 build/regression_actual_out.txt: build/regression
 	./build/regression > ./build/regression_actual_out.txt
