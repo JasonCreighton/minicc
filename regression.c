@@ -4,6 +4,7 @@
 // overflow.
 
 extern int printf(const char *fmt, ...);
+extern int putchar(int ch);
 extern double sin(double x);
 extern double cos(double x);
 extern double pow(double x, double y);
@@ -517,6 +518,56 @@ void test_fibonacci() {
     }
 }
 
+int in_mandelbrot_set(double c_re, double c_im) {
+    const int max_iterations = 250;
+    double z_re = 0.0;
+    double z_im = 0.0;
+
+    int i;
+    for(i = 0; i < max_iterations; ++i) {
+        double next_z_re = (z_re * z_re) - (z_im * z_im) + c_re;
+        double next_z_im = (2 * z_re * z_im) + c_im;
+
+        z_re = next_z_re;
+        z_im = next_z_im;
+
+        double magSquared = (z_re * z_re) + (z_im * z_im);
+
+        if(magSquared > 4.0) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+void test_mandelbrot() {
+    begin_test("test_mandelbrot");
+
+    const int width = 120;
+    const int height = 60;
+    const double start_re = -2.0;
+    const double end_re = 0.5;
+    const double start_im = -1.25;
+    const double end_im = 1.25;
+    const double scale_re = (end_re - start_re) / width;
+    const double scale_im = (end_im - start_im) / height;
+
+    int x;
+    int y;
+    for(y = 0; y < height; ++y) {
+        for(x = 0; x < width; ++x) {
+            if(in_mandelbrot_set(start_re + (x * scale_re), start_im + (y * scale_im))) {
+                // FIXME: Add character literals                        
+                putchar(42); // '*'
+            } else {
+                putchar(32); // ' '
+            }
+        }
+        putchar(10); // '\n'
+    }
+}
+
 int main() {
     unsigned char w;
     short x = 42;
@@ -580,6 +631,7 @@ int main() {
     test_pointers();
     test_trig_functions();
     test_fibonacci();
+    test_mandelbrot();
 
     return 0;
 }
