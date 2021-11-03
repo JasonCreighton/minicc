@@ -558,13 +558,12 @@ void test_mandelbrot() {
     for(y = 0; y < height; ++y) {
         for(x = 0; x < width; ++x) {
             if(in_mandelbrot_set(start_re + (x * scale_re), start_im + (y * scale_im))) {
-                // FIXME: Add character literals                        
-                putchar(42); // '*'
+                putchar('*');
             } else {
-                putchar(32); // ' '
+                putchar(' ');
             }
         }
-        putchar(10); // '\n'
+        putchar('\n');
     }
 }
 

@@ -54,6 +54,7 @@ rule token = parse
   | '?'            { QUESTIONMARK }
   | ':'            { COLON }
   | '"'            { quoted_string [] lexbuf }
+  | '\''           { character_literal lexbuf }
   | '+'            { PLUS }
   | '-'            { MINUS }
   | '*'            { TIMES }
@@ -87,9 +88,19 @@ and multiline_comment = parse
 
 and quoted_string pieces = parse
     '"'   { LITERAL_STRING(String.concat "" (List.rev pieces)) } (* End of quoted string*)
-  | "\\r" { quoted_string ("\r" :: pieces) lexbuf }
-  | "\\n" { quoted_string ("\n" :: pieces) lexbuf }
-  | "\\t" { quoted_string ("\t" :: pieces) lexbuf }
-  | "\\\\" { quoted_string ("\\" :: pieces) lexbuf }
-  | "\\x" ((hex hex) as lxm) { quoted_string ((String.make 1 (char_of_int (Scanf.sscanf lxm "%x" (fun x -> x)))) :: pieces) lexbuf }
+  | "\\"  { let ch = escape_sequence lexbuf in quoted_string ((String.make 1 ch) :: pieces) lexbuf}
   | [^ '"' '\\']+ as lxm { quoted_string (lxm :: pieces) lexbuf }
+
+and escape_sequence = parse
+  | 'r' { '\r' }
+  | 'n' { '\n' }
+  | 't' { '\t' }
+  | '\\' { '\\' }
+  | 'x' ((hex hex) as lxm) { char_of_int (Scanf.sscanf lxm "%x" (fun x -> x)) }
+
+and character_literal = parse
+  | '\\'    { let ch = escape_sequence lexbuf in end_character_literal ch lexbuf }
+  | _ as ch { end_character_literal ch lexbuf }
+
+and end_character_literal ch = parse
+  | '\'' { LITERAL_INT (Int64.of_int (int_of_char ch), 0) }
