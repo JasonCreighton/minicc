@@ -31,6 +31,9 @@ rule token = parse
   | "for"          { FOR }
   | "while"        { WHILE }
   | "return"       { RETURN }
+  | "goto"         { GOTO }
+  | "break"        { BREAK }
+  | "continue"     { CONTINUE }
   | "extern"       { EXTERN }
   | "const"        { CONST }
   | "..."          { ELLIPSIS }

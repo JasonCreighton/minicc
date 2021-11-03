@@ -63,6 +63,10 @@ and stmt =
     | DeclAssign of ctype * string * expr
     | WhileStmt of expr * stmt
     | ForStmt of expr * expr * expr * stmt
+    | LabeledStmt of string * stmt
+    | GotoStmt of string
+    | BreakStmt
+    | ContinueStmt
     | ReturnStmt of expr option
 and expr =
     | Lit of int64 * IntLitFlags.t
@@ -172,7 +176,10 @@ let ctype_for_integer_literal n (flags : IntLitFlags.t) =
 let func_to_ir prototype_table _ _ func_params func_body =
     let locals = ref [] in
     let insts = ref [] in
-    let scopes = ref [Hashtbl.create 16] in
+    let break_labels = ref [] in
+    let continue_labels = ref [] in
+    let goto_labels = Hashtbl.create 16 in
+    let scopes = ref [Hashtbl.create 16] in    
     let next_label_id = ref 0 in
     let next_local_id = ref 0 in
 
@@ -196,6 +203,15 @@ let func_to_ir prototype_table _ _ func_params func_body =
         | Some loc -> loc
         | None -> raise (Compile_error (sprintf "Undeclared variable '%s'" v))
     in
+    let break_or_continue label_stack = match label_stack with
+        | [] -> raise (Compile_error "Can't break/continue outside of loop")
+        | label_id :: _ -> add_inst @@ Ir.Jump label_id
+    in
+    let find_or_create_goto_label label = begin
+        if not (Hashtbl.mem goto_labels label) then Hashtbl.add goto_labels label (new_label ());
+        
+        Hashtbl.find goto_labels label;
+    end in
     let begin_scope () = scopes := Hashtbl.create 16 :: !scopes in
     let end_scope () = scopes := List.tl !scopes in
 
@@ -264,23 +280,37 @@ let func_to_ir prototype_table _ _ func_params func_body =
         | [], _ :: _ -> raise (Compile_error "Not enough arguments given")
     and emit_loop init_opt cond incr_opt body = begin
         let test_label_id = new_label () in
-        let end_label_id = new_label () in
+        let body_label_id = new_label () in
+        let break_label_id = new_label () in
+        let continue_label_id = new_label () in
 
+        (* Push break/continue labels onto stack *)
+        break_labels := break_label_id :: !break_labels;
+        continue_labels := continue_label_id :: !continue_labels;
+
+        (* Loop init *)
         Option.iter (fun e -> emit_expr e |> ignore) init_opt;
+
+        (* Jump over body of loop to test *)
+        add_inst @@ Ir.Jump test_label_id;
+
+        (* Loop body *)
+        add_inst @@ Ir.Label body_label_id;
+        emit_stmt body;
+
+        (* Loop increment *)
+        add_inst @@ Ir.Label continue_label_id;
+        Option.iter (fun e -> emit_expr e |> ignore) incr_opt;
 
         (* Loop test *)
         add_inst @@ Ir.Label test_label_id;
         let _, cond_ir = emit_expr cond in
-        add_inst @@ Ir.JumpIf (end_label_id, Ir.logical_not cond_ir);
+        add_inst @@ Ir.JumpIf (body_label_id, cond_ir);
+        add_inst @@ Ir.Label break_label_id;
 
-        (* Loop body *)
-        emit_stmt body;
-
-        (* Loop increment *)
-        Option.iter (fun e -> emit_expr e |> ignore) incr_opt;
-
-        add_inst @@ Ir.Jump test_label_id;
-        add_inst @@ Ir.Label end_label_id
+        (* Pop break/continue labels off of stack *)
+        break_labels := List.tl !break_labels;
+        continue_labels := List.tl !continue_labels;
     end
     and emit_short_circuit_logical_op short_circuit_condition e1 e2 = begin
         let result_local_id = new_local (Unsigned Char) in
@@ -320,6 +350,14 @@ let func_to_ir prototype_table _ _ func_params func_body =
             begin_scope ();
             emit_loop (Option.some init) cond (Option.some incr) body;
             end_scope ();
+        end
+        | BreakStmt -> break_or_continue !break_labels
+        | ContinueStmt -> break_or_continue !continue_labels
+        | GotoStmt label -> add_inst @@ Ir.Jump (find_or_create_goto_label label)
+        | LabeledStmt (label, stmt) -> begin
+            let label_id = find_or_create_goto_label label in
+            add_inst @@ Ir.Label label_id;
+            emit_stmt stmt;
         end
         | ReturnStmt expr_opt ->
             add_inst @@ Ir.Return (Option.map (fun e -> emit_expr e |> snd) expr_opt)

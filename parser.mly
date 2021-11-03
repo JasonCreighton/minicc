@@ -32,6 +32,9 @@
 %token FOR
 %token WHILE
 %token RETURN
+%token GOTO
+%token BREAK
+%token CONTINUE
 %token EXTERN
 %token ELLIPSIS
 %token EOF
@@ -125,12 +128,16 @@ statement_list:
 statement
   : expr SEMICOLON { Ast.ExprStmt $1 }
   | compound_statement { $1 }
+  | IDENTIFIER COLON statement { Ast.LabeledStmt ($1, $3) }
   | named_ctype SEMICOLON { let (name, typ) = $1 in Ast.DeclVar (name, typ) }
   | ctype IDENTIFIER EQUAL expr SEMICOLON { Ast.DeclAssign ($1, $2, $4) }  
   | IF LPAREN expr RPAREN statement { Ast.IfElseStmt ($3, $5, Ast.CompoundStmt []) }
   | IF LPAREN expr RPAREN statement ELSE statement { Ast.IfElseStmt ($3, $5, $7) }
   | WHILE LPAREN expr RPAREN statement { Ast.WhileStmt ($3, $5) }
   | FOR LPAREN expr SEMICOLON expr SEMICOLON expr RPAREN statement { Ast.ForStmt ($3, $5, $7, $9) }
+  | GOTO IDENTIFIER SEMICOLON { Ast.GotoStmt $2 }
+  | BREAK SEMICOLON { Ast.BreakStmt }
+  | CONTINUE SEMICOLON { Ast.ContinueStmt }
   | RETURN SEMICOLON { Ast.ReturnStmt None }
   | RETURN expr SEMICOLON { Ast.ReturnStmt (Some $2) }
 ;

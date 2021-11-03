@@ -567,6 +567,38 @@ void test_mandelbrot() {
     }
 }
 
+void test_jumps() {
+    begin_test("test_jumps");
+
+    int i;
+    int j;
+
+    i = 0;
+loop:
+    printf("i=%d\n", i++);
+
+    if(i < 10) goto loop;
+
+    for(i = 0; i < 50; ++i) {
+        if((i % 2) == 0) continue;
+        for(j = 0; j < 50; ++j) {
+            if((j % 3) == 0) continue;
+
+            printf("i=%d, j=%d\n", i, j);
+
+            if(j > 25) break;
+        }
+        if(i > 20) break;
+    }
+
+    goto done;
+
+    printf("Dead code...\n");
+
+done:
+    return;
+}
+
 int main() {
     unsigned char w;
     short x = 42;
@@ -631,6 +663,7 @@ int main() {
     test_trig_functions();
     test_fibonacci();
     test_mandelbrot();
+    test_jumps();
 
     return 0;
 }
