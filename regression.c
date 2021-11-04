@@ -382,7 +382,7 @@ void test_double_operations() {
 }
 
 void test_float_operations() {
-    double test_vector[11];
+    float test_vector[11];
 
     test_vector[0] = 0.0f;
     test_vector[1] = 1.0f;
@@ -401,7 +401,7 @@ void test_float_operations() {
     float x;
     float y;
 
-    begin_test("test_double_operations");
+    begin_test("test_float_operations");
 
     for(i = 0; i < 11; ++i) {
         x = test_vector[i];
@@ -573,7 +573,7 @@ void test_jumps() {
     int i;
     int j;
 
-    if(0) some_label: printf("Should not be reached because a label is attached to another statement, not an individual statement.\n");
+    if(0) some_label: printf("Should not be reached because a label is attached to another statement, not an individual statement of its own.\n");
     if(0) goto some_label; // Avoid unused label warning from gcc
 
     i = 0;
