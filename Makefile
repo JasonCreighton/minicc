@@ -43,7 +43,7 @@ build/regression: build/regression.o
 	gcc -lm build/regression.o -o build/regression
 
 build/regression_golden: regression.c
-	gcc -lm -Wall -Werror -fwrapv -fsanitize=undefined regression.c -o build/regression_golden
+	gcc -lm -Wall -fwrapv -fsanitize=undefined regression.c -o build/regression_golden
 
 build/regression_actual_out.txt: build/regression
 	./build/regression > ./build/regression_actual_out.txt
