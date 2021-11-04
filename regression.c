@@ -573,6 +573,9 @@ void test_jumps() {
     int i;
     int j;
 
+    if(0) some_label: printf("Should not be reached because a label is attached to another statement, not an individual statement.\n");
+    if(0) goto some_label; // Avoid unused label warning from gcc
+
     i = 0;
 loop:
     printf("i=%d\n", i++);
