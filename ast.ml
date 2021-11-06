@@ -55,6 +55,7 @@ type unaryop =
 type decl =
     | Function of ctype * string * (ctype * string) list * stmt
     | FunctionDecl of ctype * string * (ctype * string) list * bool
+    | GlobalVarDecl of ctype * string
 and stmt =
     | CompoundStmt of stmt list
     | ExprStmt of expr
@@ -120,6 +121,12 @@ let rec sizeof ctype =
     | PointerTo _ -> 8
     | ArrayOf (ctype, size) -> (sizeof ctype) * size
 
+let rec alignment ctype =
+    match ctype with
+    | Void -> raise (Compile_error "Can't use void in sized context")
+    | (Signed _ | Unsigned _ | PointerTo _ | Float | Double) as primtype -> sizeof primtype
+    | ArrayOf (elem_ctype, _) -> alignment elem_ctype
+
 let ir_datatype_for_ctype ctype =
     match ctype with
     | Signed Char -> Ir.I8
@@ -173,7 +180,7 @@ let ctype_for_integer_literal n (flags : IntLitFlags.t) =
     else if fits_ulong && long_okay && unsigned_okay then Unsigned Long
     else failwith "Could not find type for integer literal"
 
-let func_to_ir prototype_table _ _ func_params func_body =
+let func_to_ir prototype_table global_ctypes _ _ func_params func_body =
     let locals = ref [] in
     let insts = ref [] in
     let break_labels = ref [] in
@@ -198,10 +205,16 @@ let func_to_ir prototype_table _ _ func_params func_body =
         (* Record in variable table *)
         Hashtbl.add (List.hd !scopes) v (new_local ctype, ctype)
     in
-    let find_var_loc v =
+    let find_var_addr v =
+        (* Try to find a local *)
         match scope_lookup_opt !scopes v with
-        | Some loc -> loc
-        | None -> raise (Compile_error (sprintf "Undeclared variable '%s'" v))
+        | Some (local_id, ctype) -> (ctype, Ir.LocalAddr local_id)
+        | None -> begin
+            (* Try to find a global *)
+            match Hashtbl.find_opt global_ctypes v with
+            | Some ctype -> (ctype, Ir.GlobalAddr v)
+            | None -> raise (Compile_error (sprintf "Undeclared variable '%s'" v))
+        end
     in
     let break_or_continue label_stack = match label_stack with
         | [] -> raise (Compile_error "Can't break/continue outside of loop")
@@ -218,7 +231,7 @@ let func_to_ir prototype_table _ _ func_params func_body =
     (* Mutually recursive functions to walk AST *)
     let rec address_of_lvalue expr =
         match expr with
-        | VarRef v -> let local_id, ctype = find_var_loc v in (ctype, Ir.LocalAddr local_id)
+        | VarRef v -> find_var_addr v
         | Subscript (ary, idx) -> begin
             match address_of_lvalue ary with
             | ArrayOf (elem_ctype, _), addr_ir -> begin                
@@ -234,29 +247,25 @@ let func_to_ir prototype_table _ _ func_params func_body =
         end
         | _ -> raise (Compile_error "expr is not an lvalue")
     and assign_var v expr =
-        let local_id, ctype = find_var_loc v in
+        let ctype, var_addr_ir = find_var_addr v in
         let expr_ctype, expr_ir = emit_expr expr in
         let ir_datatype = ir_datatype_for_ctype ctype in
         let converted_ir = Ir.convert ir_datatype (ir_datatype_for_ctype expr_ctype) expr_ir in
-        add_inst @@ Ir.Store (ir_datatype, Ir.LocalAddr local_id, converted_ir);
-        (ctype, Ir.Load (ir_datatype, Ir.LocalAddr local_id))
-    and inc_or_dec yield_old_value delta expr =
-        match expr with
-        | VarRef v -> begin
-            let local_id, ctype = find_var_loc v in
+        add_inst @@ Ir.Store (ir_datatype, var_addr_ir, converted_ir);
+        (ctype, Ir.Load (ir_datatype, var_addr_ir))
+    and inc_or_dec yield_old_value delta expr = begin
+            let ctype, expr_addr_ir = address_of_lvalue expr in
             let ir_datatype = ir_datatype_for_ctype ctype in
 
             (* Always pre-increment *)
-            add_inst @@ Ir.Store (ir_datatype, Ir.LocalAddr local_id, Ir.BinOp (Ir.Add, Ir.Load (ir_datatype, Ir.LocalAddr local_id), Ir.ConstInt (ir_datatype, Int64.of_int delta)));
+            add_inst @@ Ir.Store (ir_datatype, expr_addr_ir, Ir.BinOp (Ir.Add, Ir.Load (ir_datatype, expr_addr_ir), Ir.ConstInt (ir_datatype, Int64.of_int delta)));
 
             (* FIXME: For post-increment, rather than doing the increment at
             the appropriate time, we just add/subtract the appropriate amount
             to recover the original value. *)
             let adj = if yield_old_value then -delta else 0 in
-            (ctype, Ir.BinOp (Ir.Add, (Ir.Load (ir_datatype, Ir.LocalAddr local_id)), Ir.ConstInt (ir_datatype, Int64.of_int adj)))
+            (ctype, Ir.BinOp (Ir.Add, (Ir.Load (ir_datatype, expr_addr_ir)), Ir.ConstInt (ir_datatype, Int64.of_int adj)))
         end
-        | Subscript (_, _) -> failwith "TODO: Implement array inc/dec"
-        | _ -> raise (Compile_error "Pre-Increment/Decrement of non-lvalue")
     and eval_arguments is_varargs exprs ctypes =
         match exprs, ctypes with
         | [], [] -> []
@@ -379,7 +388,7 @@ let func_to_ir prototype_table _ _ func_params func_body =
 
             (lhs_ctype, Ir.Load (ir_datatype_for_ctype lhs_ctype, lhs_addr_ir))
         end
-        | VarRef v -> let local_id, ctype = find_var_loc v in (ctype, Ir.Load (ir_datatype_for_ctype ctype, Ir.LocalAddr local_id))
+        | VarRef v -> let ctype, var_addr_ir = find_var_addr v in (ctype, Ir.Load (ir_datatype_for_ctype ctype, var_addr_ir))
         | Subscript (_, _) -> begin
             let elem_ctype, addr_ir = address_of_lvalue expr in
             (elem_ctype, Ir.Load (ir_datatype_for_ctype elem_ctype, addr_ir))
@@ -485,8 +494,9 @@ let func_to_ir prototype_table _ _ func_params func_body =
 let to_ir decl_list =
     let func_table = Hashtbl.create 64 in
     let func_prototypes = Hashtbl.create 64 in
+    let global_ctypes = Hashtbl.create 64 in
 
-    (* Create function prototype table, needed for AST to IR conversion *)
+    (* Create function prototype table and global variable table *)
     List.iter (fun d ->
         match d with
         | Function (ret_type, name, named_params, _) -> Hashtbl.add func_prototypes name
@@ -494,18 +504,20 @@ let to_ir decl_list =
         | FunctionDecl (ret_type, name, named_params, is_varargs) -> Hashtbl.add func_prototypes name
             (* TODO: A function declaration is not necessarily extern, it
             might be a forward declaration *)
-            { name; ret_type; arg_types=List.map fst named_params; is_varargs; is_extern=true } 
+            { name; ret_type; arg_types=List.map fst named_params; is_varargs; is_extern=true }
+        | GlobalVarDecl (ctype, name) -> Hashtbl.add global_ctypes name ctype
     ) decl_list;
 
     (* Create table of function IR *)
     List.iter (fun d ->
         match d with
-        | Function (ret_ctype, name, params, body) -> Hashtbl.add func_table name (func_to_ir func_prototypes ret_ctype name params body)
-        | FunctionDecl _ -> ()
+        | Function (ret_ctype, name, params, body) -> Hashtbl.add func_table name (func_to_ir func_prototypes global_ctypes ret_ctype name params body)
+        | FunctionDecl _ | GlobalVarDecl _ -> ()
     ) decl_list;
 
     {
         Ir.extern_symbols = Hashtbl.fold (fun name proto acc -> if proto.is_extern then name :: acc else acc) func_prototypes [];
+        Ir.global_variables = Hashtbl.fold (fun v ctype acc -> (v, {Ir.size=sizeof ctype; Ir.alignment=alignment ctype}) :: acc) global_ctypes [];
         Ir.func_table;
     }
 

@@ -52,6 +52,7 @@ type expr =
     | ConstStringAddr of string
     | Load of datatype * expr
     | LocalAddr of local_id
+    | GlobalAddr of string
 
 type inst =
     | Store of datatype * expr * expr
@@ -61,18 +62,19 @@ type inst =
     | JumpIf of label_id * expr
     | Return of expr option
 
-type local_def = {
+type storage_spec = {
     size : int;
     alignment : int;
 }
 
 type func = {    
     insts : inst list;
-    locals : (local_id * local_def) list;
+    locals : (local_id * storage_spec) list;
 }
 
 type compilation_unit = {
     extern_symbols : string list;
+    global_variables : (string * storage_spec) list;
     func_table : (string, func) Hashtbl.t;
 }
 
@@ -103,7 +105,7 @@ let rec typecheck_expr expr =
     end
     | ConvertTo (typ, e) -> typecheck_expr e |> ignore; typ
     | ConstInt (typ, _) | ConstFloat (typ, _) -> typ
-    | ConstStringAddr _ | LocalAddr _ -> Ptr
+    | ConstStringAddr _ | LocalAddr _ | GlobalAddr _ -> Ptr
 
 let typecheck_inst inst =
     match inst with
@@ -197,7 +199,7 @@ let convert to_type from_type expr =
 
 let rec normalize e =
     match e with
-    | ConstInt _ | ConstFloat _ | ConstStringAddr _ | LocalAddr _ -> e (* Already normalized *)
+    | ConstInt _ | ConstFloat _ | ConstStringAddr _ | LocalAddr _ | GlobalAddr _ -> e (* Already normalized *)
     | UnaryOp (op, nonnormal_expr) -> begin
         let e1 = normalize nonnormal_expr in
         match op, e1 with

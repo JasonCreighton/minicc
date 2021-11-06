@@ -57,6 +57,7 @@ decl_list
 decl
   : ctype IDENTIFIER function_parameters compound_statement { Ast.Function ($1, $2, fst $3, $4) }
   | EXTERN ctype IDENTIFIER function_parameters SEMICOLON { Ast.FunctionDecl ($2, $3, fst $4, snd $4) }
+  | ctype IDENTIFIER SEMICOLON { Ast.GlobalVarDecl ($1, $2) }
 ;
 
 function_parameters

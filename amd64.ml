@@ -243,6 +243,7 @@ let emit_func func_table lit_table ir_func =
         | Ir.ConstFloat (_, _) -> failwith "Invalid type for ConstFloat"
         | Ir.ConstStringAddr s -> asmf "mov rax, string_lit_%d" (id_of_string_lit lit_table s); Ir.Ptr
         | Ir.LocalAddr local_id -> asmf "lea rax, [rbp + %d]" (find_local_offset local_id); Ir.Ptr
+        | Ir.GlobalAddr v -> asmf "mov rax, %s" v; Ir.Ptr
         | Ir.Load (typ, addr) -> begin
             emit_expr addr |> ignore;
             let ld inst dest_reg width = asmf "%s %s, %s [rax]" inst dest_reg width in
@@ -324,6 +325,10 @@ let emit ir_comp_unit =
     let ob = Buffer.create 4096 in
 
     List.iter (bprintf ob "extern %s\n") ir_comp_unit.Ir.extern_symbols;
+    Buffer.add_string ob "section .bss\n";
+    let sorted_globals = List.sort (fun (_, a) (_, b) -> Int.compare b.Ir.alignment a.Ir.alignment) ir_comp_unit.Ir.global_variables in
+    List.iter (fun (v, storage) -> bprintf ob "align %d\n%s: resb %d\n" storage.Ir.alignment v storage.Ir.size) sorted_globals;
+
     Buffer.add_string ob "section .text\n";
 
     Hashtbl.iter (fun func_name func_ir -> begin
@@ -348,7 +353,7 @@ let emit ir_comp_unit =
     ) ir_comp_unit.Ir.func_table;
 
     (* Output string literals *)
-    Buffer.add_string ob "section .data\n";
+    Buffer.add_string ob "section .rodata\n";
     Hashtbl.iter (fun lit id ->
         bprintf ob "string_lit_%d:\n" id;
         Buffer.add_string ob "db ";
