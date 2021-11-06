@@ -5,6 +5,8 @@
 
 extern int printf(const char *fmt, ...);
 extern int putchar(int ch);
+extern void *malloc(unsigned long size);
+extern void free(void *ptr);
 extern double sin(double x);
 extern double cos(double x);
 extern double pow(double x, double y);
@@ -615,6 +617,59 @@ done:
     return;
 }
 
+void print_primes_up_to(unsigned long limit) {
+    unsigned long ary_size = limit + 1;
+    unsigned long i;
+    unsigned long j;
+
+    char *is_prime = malloc(ary_size);
+
+    for(i = 0; i < ary_size; ++i) {
+        is_prime[i] = 1;
+    }
+
+    is_prime[0] = 0;
+    is_prime[1] = 0;
+
+    for(i = 2; (i * i) < ary_size; ++i) {
+        if(is_prime[i]) {
+            for(j = i * i; j < ary_size; j = j + i) {
+                is_prime[j] = 0;
+            }
+        }
+    }
+
+    for(i = 0; i < ary_size; ++i) {
+        if(is_prime[i]) printf("%lu ", i);
+    }
+    printf("\n");
+
+    free(is_prime);
+}
+
+void test_print_primes() {
+    begin_test("test_print_primes");
+
+    print_primes_up_to(1000);
+}
+
+void test_array_of_pointers() {
+    begin_test("test_array_of_pointers");
+    int x = 100;
+    int y = 200;
+    int z = 300;
+    int *ptr[3];
+
+    ptr[0] = &x;
+    ptr[1] = &y;
+    ptr[2] = &z;
+
+    int i;
+    for(i = 0; i < 3; ++i) {
+        printf("*ptr[%d] = %d\n", i, *ptr[i]);
+    }
+}
+
 int main() {
     g_num_tests = 0;
 
@@ -636,6 +691,8 @@ int main() {
     test_fibonacci();
     test_mandelbrot();
     test_jumps();
+    test_print_primes();
+    test_array_of_pointers();
 
     printf("=== Ran %d tests ===\n", g_num_tests);
 

@@ -55,9 +55,9 @@ decl_list
 ;
 
 decl
-  : ctype IDENTIFIER function_parameters compound_statement { Ast.Function ($1, $2, fst $3, $4) }
-  | EXTERN ctype IDENTIFIER function_parameters SEMICOLON { Ast.FunctionDecl ($2, $3, fst $4, snd $4) }
-  | ctype IDENTIFIER SEMICOLON { Ast.GlobalVarDecl ($1, $2) }
+  : named_ctype function_parameters compound_statement { Ast.Function (fst $1, snd $1, fst $2, $3) }
+  | EXTERN named_ctype function_parameters SEMICOLON { Ast.FunctionDecl (fst $2, snd $2, fst $3, snd $3) }
+  | named_ctype SEMICOLON { Ast.GlobalVarDecl (fst $1, snd $1) }
 ;
 
 function_parameters
@@ -76,31 +76,28 @@ varargs_function_parameter_list
   | named_ctype COMMA varargs_function_parameter_list { $1 :: $3 }
 
 named_ctype
-  : ctype IDENTIFIER { ($1, $2) }
-  | ctype prefix_ctype_modifiers IDENTIFIER { ($1 |> $2, $3) }
-  | ctype IDENTIFIER postfix_ctype_modifiers { ($1 |> $3, $2) }
-  /* We apply the prefix modifier first. (eg, "int *x[5]" is an array of pointers to int, not a pointer to an array of ints) */
-  | ctype prefix_ctype_modifiers IDENTIFIER postfix_ctype_modifiers { ($1 |> $2 |> $4, $3) }
+  : ctype derived_ctype { Ast.derived_ctype_to_ctype $1 $2 }
 ;
 
 ctype
-  : primitive_type { $1 }
-  | CONST primitive_type { $2 } /* Ignore const for now */
+  : basic_ctype { $1 }
+  | CONST basic_ctype { $2 } /* Ignore const for now */
 ;
 
-/* Kind of odd productions, they return a function that should be applied to
-   the ctype in order to yield the modified ctype. */
-prefix_ctype_modifiers
-  : TIMES { fun typ -> Ast.PointerTo typ }
-  | TIMES prefix_ctype_modifiers { fun typ -> Ast.PointerTo ($2 typ) }
+p0_derived_ctype
+  : IDENTIFIER { Ast.DName $1 }
+  | TIMES p0_derived_ctype { Ast.DPointerTo $2 }
+  | LPAREN p1_derived_ctype RPAREN { $2 }
 ;
 
-postfix_ctype_modifiers
-  : LBRACKET LITERAL_INT RBRACKET { fun typ -> Ast.ArrayOf (typ, Int64.to_int (fst $2)) }
-  | LBRACKET LITERAL_INT RBRACKET postfix_ctype_modifiers { fun typ -> Ast.ArrayOf ($4 typ, Int64.to_int (fst $2)) }
+p1_derived_ctype
+  : p0_derived_ctype { $1 }
+  | p1_derived_ctype LBRACKET LITERAL_INT RBRACKET { Ast.DArrayOf ($1, Int64.to_int (fst $3)) }
 ;
 
-primitive_type
+derived_ctype : p1_derived_ctype { $1 };
+
+basic_ctype
   : VOID { Ast.Void }
   | int_size { Ast.Signed $1 }
   | SIGNED int_size { Ast.Signed $2 }
@@ -131,7 +128,7 @@ statement
   | compound_statement { $1 }
   | IDENTIFIER COLON statement { Ast.LabeledStmt ($1, $3) }
   | named_ctype SEMICOLON { let (name, typ) = $1 in Ast.DeclVar (name, typ) }
-  | ctype IDENTIFIER EQUAL expr SEMICOLON { Ast.DeclAssign ($1, $2, $4) }  
+  | named_ctype EQUAL expr SEMICOLON { Ast.DeclAssign (fst $1, snd $1, $3) }  
   | IF LPAREN expr RPAREN statement { Ast.IfElseStmt ($3, $5, Ast.CompoundStmt []) }
   | IF LPAREN expr RPAREN statement ELSE statement { Ast.IfElseStmt ($3, $5, $7) }
   | WHILE LPAREN expr RPAREN statement { Ast.WhileStmt ($3, $5) }

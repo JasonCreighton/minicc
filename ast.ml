@@ -24,6 +24,12 @@ type ctype =
     | PointerTo of ctype
     | ArrayOf of ctype * int
 
+(* Temporary type for the parser, which will get turned into a ctype *)
+type derived_ctype =
+    | DName of string
+    | DPointerTo of derived_ctype
+    | DArrayOf of derived_ctype * int    
+
 type binop =
     | Add
     | Sub
@@ -95,6 +101,16 @@ type function_prototype = {
     is_varargs : bool;
     is_extern : bool;
 }
+
+let rec derived_ctype_to_ctype ctype derived_ctype =
+    match derived_ctype with
+    | DName name -> (ctype, name)
+    | DPointerTo subtyp ->
+        let applied_ctype, name = derived_ctype_to_ctype ctype subtyp in
+        (PointerTo applied_ctype, name)
+    | DArrayOf (subtyp, len) ->
+        let applied_ctype, name = derived_ctype_to_ctype ctype subtyp in
+        (ArrayOf (applied_ctype, len), name)
 
 let rec scope_lookup_opt list_of_tbls key =
     match list_of_tbls with
@@ -233,10 +249,16 @@ let func_to_ir prototype_table global_ctypes ret_ctype _ func_params func_body =
         match expr with
         | VarRef v -> find_var_addr v
         | Subscript (ary, idx) -> begin
+            (* FIXME: Reduce duplication in ArrayOf/PointerTo *)
             match address_of_lvalue ary with
-            | ArrayOf (elem_ctype, _), addr_ir -> begin                
+            | ArrayOf (elem_ctype, _), ary_addr_ir -> begin                
                 let _, idx_ir = emit_expr idx in
-                (elem_ctype, Ir.BinOp (Ir.Add, addr_ir, Ir.BinOp (Ir.Mul, Ir.ConvertTo (Ir.Ptr, idx_ir), Ir.ConstInt (Ir.Ptr, Int64.of_int (sizeof elem_ctype)))))
+                (elem_ctype, Ir.BinOp (Ir.Add, ary_addr_ir, Ir.BinOp (Ir.Mul, Ir.ConvertTo (Ir.Ptr, idx_ir), Ir.ConstInt (Ir.Ptr, Int64.of_int (sizeof elem_ctype)))))
+            end
+            | PointerTo elem_ctype, addr_of_ptr_ir -> begin
+                let _, idx_ir = emit_expr idx in
+                let ptr_ir = Ir.Load (Ir.Ptr, addr_of_ptr_ir) in
+                (elem_ctype, Ir.BinOp (Ir.Add, ptr_ir, Ir.BinOp (Ir.Mul, Ir.ConvertTo (Ir.Ptr, idx_ir), Ir.ConstInt (Ir.Ptr, Int64.of_int (sizeof elem_ctype))))) 
             end
             | _ -> failwith "Expected target of subscript to be array type"
         end
