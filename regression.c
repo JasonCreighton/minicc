@@ -24,6 +24,10 @@ void print_float(float x) {
     printf("print_float(%f)\n", x);
 }
 
+double long_to_double(long x) {
+    return x;
+}
+
 void test_comments() {
     // Single line comments should be supported
 
@@ -457,6 +461,12 @@ void test_implicit_function_argument_conversion() {
     // print_float(18446744073709551615UL);
 }
 
+void test_implicit_function_return_conversion() {
+    begin_test("test_implicit_function_return_conversion");
+
+    print_double(long_to_double(42));
+}
+
 void test_arrays() {
     int ary[10];
     int ary_2d[5][10];
@@ -619,6 +629,7 @@ int main() {
     test_float_operations();
     test_variable_scope();
     test_implicit_function_argument_conversion();
+    test_implicit_function_return_conversion();
     test_arrays();
     test_pointers();
     test_trig_functions();

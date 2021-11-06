@@ -180,7 +180,7 @@ let ctype_for_integer_literal n (flags : IntLitFlags.t) =
     else if fits_ulong && long_okay && unsigned_okay then Unsigned Long
     else failwith "Could not find type for integer literal"
 
-let func_to_ir prototype_table global_ctypes _ _ func_params func_body =
+let func_to_ir prototype_table global_ctypes ret_ctype _ func_params func_body =
     let locals = ref [] in
     let insts = ref [] in
     let break_labels = ref [] in
@@ -369,7 +369,13 @@ let func_to_ir prototype_table global_ctypes _ _ func_params func_body =
             emit_stmt stmt;
         end
         | ReturnStmt expr_opt ->
-            add_inst @@ Ir.Return (Option.map (fun e -> emit_expr e |> snd) expr_opt)
+            add_inst @@ Ir.Return (Option.map (fun e -> begin
+                let expr_ctype, expr_ir = emit_expr e in
+                let ret_irtype = ir_datatype_for_ctype ret_ctype in
+                let expr_irtype = ir_datatype_for_ctype expr_ctype in
+                Ir.convert ret_irtype expr_irtype expr_ir
+            end
+            ) expr_opt)
     and emit_expr expr =
         match expr with
         | Lit (n, flags) ->
