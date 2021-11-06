@@ -128,6 +128,9 @@ let emit_func func_table lit_table ir_func =
                 (* FIXME: Terrible hack to align stack to 16 bytes before calling library function, this should be done statically *)
                 asm "mov rbx, rsp"; (* Save old stack pointer in callee-save register *)
                 asm "and rsp, -16"; (* Align stack *)
+
+                 (* Varargs functions need the number of vector registers used in "al". TODO: Only do this when calling varargs functions. *)
+                asmf "mov eax, %d" !float_idx;
                 asmf "call %s WRT ..plt" func_name;
                 asm "mov rsp, rbx" (* Restore old stack pointer *)
             );
