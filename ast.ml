@@ -24,11 +24,12 @@ type ctype =
     | PointerTo of ctype
     | ArrayOf of ctype * int
 
-(* Temporary type for the parser, which will get turned into a ctype *)
-type derived_ctype =
-    | DName of string
-    | DPointerTo of derived_ctype
-    | DArrayOf of derived_ctype * int    
+(* Temporary result of parsing a type declaration, which is converted into a
+ctype by usage_to_ctype *)
+type ctype_usage =
+    | UName of string
+    | UDeref of ctype_usage
+    | USubscript of ctype_usage * int
 
 type binop =
     | Add
@@ -102,15 +103,17 @@ type function_prototype = {
     is_extern : bool;
 }
 
-let rec derived_ctype_to_ctype ctype derived_ctype =
-    match derived_ctype with
-    | DName name -> (ctype, name)
-    | DPointerTo subtyp ->
-        let applied_ctype, name = derived_ctype_to_ctype ctype subtyp in
-        (PointerTo applied_ctype, name)
-    | DArrayOf (subtyp, len) ->
-        let applied_ctype, name = derived_ctype_to_ctype ctype subtyp in
-        (ArrayOf (applied_ctype, len), name)
+(* In C, "usage follows declaration", which means that parsed "usage" needs to
+be turned inside out to yield a type, since the innermost usage corresponds
+to the outermost type, and vice-versa. *)
+let usage_to_ctype base_ctype usage =
+    let rec go ctype usage =
+        match usage with
+        | UName name -> (ctype, name)
+        | UDeref subusage -> go (PointerTo ctype) subusage
+        | USubscript (subusage, len) -> go (ArrayOf (ctype, len)) subusage
+    in
+    go base_ctype usage
 
 let rec scope_lookup_opt list_of_tbls key =
     match list_of_tbls with
@@ -569,7 +572,17 @@ let test_ctype_for_integer_literal () = begin
     assert ((ctype_for_integer_literal 5000000000L (IntLitFlags.decimal lor IntLitFlags.unsigned)) = Unsigned Long);
 end
 
+
+let test_usage_to_ctype () = begin
+    assert ((usage_to_ctype Float (UName "hello")) = (Float, "hello"));
+    assert ((usage_to_ctype Float (UDeref (UName "hello"))) = (PointerTo Float, "hello"));
+    assert ((usage_to_ctype Float (USubscript ((UName "hello"), 10))) = (ArrayOf (Float, 10), "hello"));
+    assert ((usage_to_ctype Float (UDeref (USubscript ((UName "hello"), 10)))) = (ArrayOf (PointerTo Float, 10), "hello"));
+    assert ((usage_to_ctype Float (USubscript (UDeref (UName "hello"), 10))) = (PointerTo (ArrayOf (Float, 10)), "hello"));
+end
+
 let tests () = begin
     test_binop_common_ctype ();
     test_ctype_for_integer_literal ();
+    test_usage_to_ctype ();
 end

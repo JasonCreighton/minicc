@@ -76,7 +76,7 @@ varargs_function_parameter_list
   | named_ctype COMMA varargs_function_parameter_list { $1 :: $3 }
 
 named_ctype
-  : ctype derived_ctype { Ast.derived_ctype_to_ctype $1 $2 }
+  : ctype ctype_usage { Ast.usage_to_ctype $1 $2 }
 ;
 
 ctype
@@ -84,18 +84,22 @@ ctype
   | CONST basic_ctype { $2 } /* Ignore const for now */
 ;
 
-p0_derived_ctype
-  : IDENTIFIER { Ast.DName $1 }
-  | TIMES p0_derived_ctype { Ast.DPointerTo $2 }
-  | LPAREN p1_derived_ctype RPAREN { $2 }
+p0_ctype_usage
+  : IDENTIFIER { Ast.UName $1 }
+  | LPAREN ctype_usage RPAREN { $2 }
 ;
 
-p1_derived_ctype
-  : p0_derived_ctype { $1 }
-  | p1_derived_ctype LBRACKET LITERAL_INT RBRACKET { Ast.DArrayOf ($1, Int64.to_int (fst $3)) }
+p1_ctype_usage
+  : p0_ctype_usage { $1 }
+  | p1_ctype_usage LBRACKET LITERAL_INT RBRACKET { Ast.USubscript ($1, Int64.to_int (fst $3)) }
 ;
 
-derived_ctype : p1_derived_ctype { $1 };
+p2_ctype_usage
+  : p1_ctype_usage { $1 }
+  | TIMES p2_ctype_usage { Ast.UDeref $2 }
+;
+
+ctype_usage : p2_ctype_usage { $1 };
 
 basic_ctype
   : VOID { Ast.Void }

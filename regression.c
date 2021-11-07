@@ -655,18 +655,30 @@ void test_print_primes() {
 
 void test_array_of_pointers() {
     begin_test("test_array_of_pointers");
-    int x = 100;
-    int y = 200;
-    int z = 300;
-    int *ptr[3];
+    int arrayOfInt[3];
+    int *arrayOfPtrToInt[3];
+    int *(arrayOfPtrToInt2[3]);
+    int (*ptrToArrayOfInt)[3];
 
-    ptr[0] = &x;
-    ptr[1] = &y;
-    ptr[2] = &z;
+    arrayOfInt[0] = 100;
+    arrayOfInt[1] = 200;
+    arrayOfInt[2] = 300;
+
+    arrayOfPtrToInt[0] = &arrayOfInt[0];
+    arrayOfPtrToInt[1] = &arrayOfInt[1];
+    arrayOfPtrToInt[2] = &arrayOfInt[2];
+
+    arrayOfPtrToInt2[0] = &arrayOfInt[2];
+    arrayOfPtrToInt2[1] = &arrayOfInt[1];
+    arrayOfPtrToInt2[2] = &arrayOfInt[0];
+
+    ptrToArrayOfInt = &arrayOfInt;
 
     int i;
     for(i = 0; i < 3; ++i) {
-        printf("*ptr[%d] = %d\n", i, *ptr[i]);
+        printf("*arrayOfPtrToInt[%d] = %d\n", i, *arrayOfPtrToInt[i]);
+        printf("*arrayOfPtrToInt2[%d] = %d\n", i, *arrayOfPtrToInt2[i]);
+        printf("(*ptrToArrayOfInt)[%d] = %d\n", i, (*ptrToArrayOfInt)[i]);
     }
 }
 
