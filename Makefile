@@ -6,12 +6,14 @@ MAKEFLAGS += --no-builtin-rules
 # handle nicely for some reason.
 _MKDIRS := $(shell mkdir -p build)
 
-SOURCES = ir.ml ast.ml amd64.ml parser.mli parser.ml lexer.ml tests.ml main.ml
+SOURCES = liveness.mli liveness.ml ir.ml ast.ml amd64.ml parser.mli parser.ml lexer.ml tests.ml main.ml
 BUILD_SOURCES = $(addprefix build/,$(SOURCES))
 
-.PHONY: all debug clean test test_ocaml test_regression
+.PHONY: all doc debug clean test test_ocaml test_regression
 
 all: test
+
+doc: build/html/_timestamp
 
 # ocamlopt seems to need the source files in the same directory as the output
 # files, so we copy them in as needed.
@@ -32,6 +34,12 @@ build/minicc: $(BUILD_SOURCES)
 
 build/bytecode_minicc: $(BUILD_SOURCES)
 	ocamlc -g -o build/bytecode_minicc -I build $(BUILD_SOURCES)
+
+build/html/_timestamp: build/minicc $(BUILD_SOURCES)
+	rm -rf build/html
+	mkdir -p build/html
+	cd build && ocamldoc -html -d html $(SOURCES)
+	touch $@
 
 build/regression.asm: build/minicc regression.c
 	./build/minicc -i regression.c -o build/regression.asm	
