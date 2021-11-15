@@ -6,10 +6,10 @@ MAKEFLAGS += --no-builtin-rules
 # handle nicely for some reason.
 _MKDIRS := $(shell mkdir -p build)
 
-SOURCES = liveness.mli liveness.ml ir.ml ast.ml amd64.ml parser.mli parser.ml lexer.ml tests.ml main.ml
+SOURCES = regalloc.mli regalloc.ml liveness.mli liveness.ml ir.ml ast.ml amd64.ml parser.mli parser.ml lexer.ml tests.ml main.ml
 BUILD_SOURCES = $(addprefix build/,$(SOURCES))
 
-.PHONY: all doc debug clean test test_ocaml test_regression
+.PHONY: all doc debug debug_tests clean test test_ocaml test_regression
 
 all: test
 
@@ -69,3 +69,6 @@ test: test_ocaml test_regression
 
 debug: build/bytecode_minicc
 	rlwrap ocamldebug ./build/bytecode_minicc -i regression.c -o build/regression.asm
+
+debug_tests: build/bytecode_minicc
+	rlwrap ocamldebug ./build/bytecode_minicc -runtests
