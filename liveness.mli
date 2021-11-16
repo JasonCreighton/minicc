@@ -35,3 +35,6 @@ of interfering variables.
 The callback should expect to be called with many duplicate pairs.
 *)
 val solve : t -> (int -> int -> unit) -> unit
+
+(** Run unit tests. Throws on error. *)
+val tests : unit -> unit

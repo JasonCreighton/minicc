@@ -1,4 +1,4 @@
-let rec index_of_highest_bit_set x = if x = 1 then 0 else 1 + index_of_highest_bit_set (x lsr 1)
+let rec shift_needed_to_clear x = if x = 0 then 0 else 1 + shift_needed_to_clear (x lsr 1)
 
 module Bitarray2 = struct
     type t = (nativeint, Bigarray.nativeint_elt, Bigarray.c_layout) Bigarray.Array2.t
@@ -10,7 +10,7 @@ module Bitarray2 = struct
         bitary
 
     let bit_index_mask = Nativeint.size - 1
-    let word_index_shift = index_of_highest_bit_set bit_index_mask
+    let word_index_shift = shift_needed_to_clear bit_index_mask
 
     let set (bitary : t) row col =
         let col_bit_idx = col land bit_index_mask in
@@ -89,8 +89,8 @@ let find_live_out eqn = begin
 end
 
 let call_with_interferers f (live_out : Bitarray2.t) = begin
-    let max_inst_idx = Bigarray.Array2.dim1 live_out in
-    let max_word_idx = Bigarray.Array2.dim2 live_out in
+    let max_inst_idx = Bigarray.Array2.dim1 live_out - 1 in
+    let max_word_idx = Bigarray.Array2.dim2 live_out - 1 in
     let max_bit_idx = (max_word_idx * Nativeint.size) - 1 in
 
     for inst_idx = 0 to max_inst_idx do
@@ -105,3 +105,82 @@ let call_with_interferers f (live_out : Bitarray2.t) = begin
 end
 
 let solve eqn f = find_live_out eqn |> call_with_interferers f
+
+let random_equations () = begin
+    let num_vars = 100 in
+    let num_insts = 200 in
+    let num_uses = num_insts * 2 in
+    let num_defs = num_insts in
+    let num_jumps = num_insts / 10 in
+    let eqn = create num_vars num_insts in
+
+    for inst_idx = 0 to num_insts - 2 do
+        add_succ eqn inst_idx (inst_idx + 1);
+    done;
+    for i = 1 to num_jumps do
+        add_succ eqn (Random.int (num_insts - 1)) (Random.int (num_insts - 1));
+    done;
+    for i = 1 to num_uses do
+        add_use eqn (Random.int num_insts) (Random.int num_vars);
+    done;
+    for i = 1 to num_defs do
+        add_def eqn (Random.int num_insts) (Random.int num_vars);
+    done;
+
+    eqn;
+end
+
+(* Probably there is some clever memoization or dynamic programming way to
+check the liveness analysis, but that gets uncomfortably close to how the
+values were calculated in the first place, so we keep it simple and just do a
+random walk from an arbitrary instruction and assert that any uses we find
+were in "live_out" to begin with or in definitions we passed over. *)
+let check_live_out eqn live_out starting_inst_idx = begin
+    let max_word_idx = Bigarray.Array2.dim2 live_out - 1 in
+    let currently_live = Bigarray.Array1.create Bigarray.nativeint Bigarray.c_layout (max_word_idx + 1) in
+    let rec go inst_idx timeout =
+        if timeout = 0 || eqn.successors.(inst_idx) = [] then
+            (* Done *)
+            ()
+        else begin
+            for i = 0 to max_word_idx do
+                (* All uses must be in currently_live *)
+                assert ((Nativeint.logand eqn.uses.{inst_idx, i} currently_live.{i}) = eqn.uses.{inst_idx, i});
+
+                (* Update currently live based on defs *)
+                currently_live.{i} <- Nativeint.logor currently_live.{i} eqn.defs.{inst_idx, i};
+            done;
+            let succ_list = eqn.successors.(inst_idx) in
+
+            (* Explore random successor *)
+            go (List.nth succ_list (Random.int (List.length succ_list))) (timeout - 1);
+        end;
+    in
+
+    for i = 0 to max_word_idx do
+        currently_live.{i} <- live_out.{starting_inst_idx, i};
+    done;
+
+    (* Prime the pump by going to an arbitrary successor of starting_inst_idx.
+    (Otherwise we may find uses that aren't in currently_live, since we
+    seeded currently_live from "live out", not "live in") *)
+    match eqn.successors.(starting_inst_idx) with
+        | [] -> ()
+        | next_inst_idx :: _ -> go next_inst_idx 1000;
+end
+
+let test_find_live_out () = begin
+    let num_runs = 10 in
+    let num_tests = 10 in
+    for i = 1 to num_runs do
+        let eqn = random_equations () in
+        let live_out = find_live_out eqn in
+        for j = 1 to num_tests do
+            check_live_out eqn live_out (Random.int eqn.num_insts);
+        done;
+    done;
+end
+
+let tests () = begin
+    test_find_live_out ();
+end
