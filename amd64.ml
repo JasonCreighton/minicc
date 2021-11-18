@@ -5,6 +5,12 @@ exception Compile_error of string
 let integer_call_registers = [|"rdi"; "rsi"; "rdx"; "rcx"; "r8"; "r9"|]
 let float_call_registers = [|"xmm0"; "xmm1"; "xmm2"; "xmm3"; "xmm4"; "xmm5"; "xmm6"; "xmm7"|]
 
+type constant_tables = {
+    strings: (string, int) Hashtbl.t;
+    dwords: (int32, unit) Hashtbl.t;
+    qwords: (int64, unit) Hashtbl.t;
+}
+
 let id_of_string_lit lit_table s =
     match Hashtbl.find_opt lit_table s with
     | Some id -> id
@@ -12,6 +18,14 @@ let id_of_string_lit lit_table s =
         let new_id = Hashtbl.length lit_table in
         Hashtbl.add lit_table s new_id;
         new_id
+
+let address_of_constant_qword const_table n =
+    Hashtbl.replace const_table n ();
+    sprintf "__minicc_constant_qword_%Lu" n
+
+let address_of_constant_dword const_table n =
+    Hashtbl.replace const_table n ();
+    sprintf "__minicc_constant_dword_%lu" n
 
 let layout_stack_frame locals =
     let offset_table = Hashtbl.create 100 in
@@ -45,7 +59,7 @@ let scratch_reg_name typ =
     | Ir.U8 | Ir.I8 | Ir.U16 | Ir.I16 | Ir.U32 | Ir.I32 | Ir.U64 | Ir.I64 | Ir.Ptr -> "rcx"
     | Ir.F32 | Ir.F64 -> "xmm1"
 
-let emit_func func_table lit_table ir_func =
+let emit_func func_table constants ir_func =
     (* Variables *)
     let out_buffer = Buffer.create 4096 in
     let stack_bytes_allocated, offset_table = layout_stack_frame ir_func.Ir.locals in
@@ -238,10 +252,10 @@ let emit_func func_table lit_table ir_func =
     and emit_expr expr =
         match expr with
         | Ir.ConstInt (typ, n) -> asmf "mov rax, %Ld" n; typ
-        | Ir.ConstFloat (Ir.F64, n) -> asmf "mov rax, %Ld" (Int64.bits_of_float n); asm "movq xmm0, rax"; Ir.F64
-        | Ir.ConstFloat (Ir.F32, n) -> asmf "mov eax, %ld" (Int32.bits_of_float n); asm "movd xmm0, eax"; Ir.F32
+        | Ir.ConstFloat (Ir.F64, n) -> asmf "movsd xmm0, [%s]" (address_of_constant_qword constants.qwords (Int64.bits_of_float n)); Ir.F64
+        | Ir.ConstFloat (Ir.F32, n) -> asmf "movss xmm0, [%s]" (address_of_constant_dword constants.dwords (Int32.bits_of_float n)); Ir.F32
         | Ir.ConstFloat (_, _) -> failwith "Invalid type for ConstFloat"
-        | Ir.ConstStringAddr s -> asmf "mov rax, string_lit_%d" (id_of_string_lit lit_table s); Ir.Ptr
+        | Ir.ConstStringAddr s -> asmf "mov rax, __minicc_constant_string_%d" (id_of_string_lit constants.strings s); Ir.Ptr
         | Ir.LocalAddr local_id -> asmf "lea rax, [rbp + %d]" (find_local_offset local_id); Ir.Ptr
         | Ir.GlobalAddr v -> asmf "mov rax, %s" v; Ir.Ptr
         | Ir.Load (typ, addr) -> begin
@@ -277,13 +291,11 @@ let emit_func func_table lit_table ir_func =
                 zero instead of positive zero. *)
                 (match typ with
                 | Ir.F32 -> begin
-                    asmf "mov eax, %ld" (Int32.shift_left 1l 31);
-                    asm "movd xmm1, eax";
+                    asmf "movsd xmm1, [%s]" (address_of_constant_dword constants.dwords (Int32.shift_left 1l 31));
                     asm "xorpd xmm0, xmm1";
                 end
                 | Ir.F64 -> begin
-                    asmf "mov rax, %Ld" (Int64.shift_left 1L 63);
-                    asm "movq xmm1, rax";
+                    asmf "movsd xmm1, [%s]" (address_of_constant_qword constants.qwords (Int64.shift_left 1L 63));
                     asm "xorpd xmm0, xmm1";
                 end
                 | _ -> asm "neg rax"
@@ -321,8 +333,14 @@ let emit_func func_table lit_table ir_func =
     (out_buffer, stack_bytes_allocated)
 
 let emit ir_comp_unit =
-    let lit_table = Hashtbl.create 100 in
+    let constants = {
+        strings = Hashtbl.create 100;
+        dwords = Hashtbl.create 100;
+        qwords = Hashtbl.create 100;
+    } in
     let ob = Buffer.create 4096 in
+
+    Buffer.add_string ob "default rel\n";
 
     List.iter (bprintf ob "extern %s\n") ir_comp_unit.Ir.extern_symbols;
     Buffer.add_string ob "section .bss\n";
@@ -332,7 +350,7 @@ let emit ir_comp_unit =
     Buffer.add_string ob "section .text\n";
 
     Hashtbl.iter (fun func_name func_ir -> begin
-        let body_buf, stack_bytes_allocated = emit_func ir_comp_unit.Ir.func_table lit_table func_ir in
+        let body_buf, stack_bytes_allocated = emit_func ir_comp_unit.Ir.func_table constants func_ir in
 
         bprintf ob "global %s\n" func_name;
         bprintf ob "%s:\n" func_name;
@@ -352,16 +370,26 @@ let emit ir_comp_unit =
     end
     ) ir_comp_unit.Ir.func_table;
 
-    (* Output string literals *)
+    (* Output constants *)
     Buffer.add_string ob "section .rodata\n";
+    
+    (* qword constants *)
+    Buffer.add_string ob "align 8\n";
+    Hashtbl.iter (fun n () -> bprintf ob "__minicc_constant_qword_%Lu: dq %Lu\n" n n) constants.qwords;
+
+    (* dword constants *)
+    Buffer.add_string ob "align 4\n";
+    Hashtbl.iter (fun n () -> bprintf ob "__minicc_constant_dword_%lu: dq %lu\n" n n) constants.dwords;
+
+    (* String constants *)
     Hashtbl.iter (fun lit id ->
-        bprintf ob "string_lit_%d:\n" id;
+        bprintf ob "__minicc_constant_string_%d:\n" id;
         Buffer.add_string ob "db ";
         String.iter (fun c -> bprintf ob "%d, " (Char.code c)) lit;
 
         (* NUL terminate *)
         Buffer.add_string ob "0\n";
-    ) lit_table;
+    ) constants.strings;
 
     (* Return buffer *)
     ob
