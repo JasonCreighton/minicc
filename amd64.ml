@@ -2,14 +2,31 @@ open Printf
 
 exception Compile_error of string
 
+type int_width =
+    | W8
+    | W16
+    | W32
+    | W64
+
+type float_width =
+    | F32
+    | F64
+
 module IntReg = struct
     type t = Virt of int [@@unboxed]
-    let register_names = [|"rax"; "rcx"; "rdx"; "rbx"; "rsp"; "rbp"; "rsi"; "rdi"; "r8"; "r9"; "r10"; "r11"; "r12"; "r13"; "r14"; "r15";|]
+    let qword_names = [|"rax"; "rcx"; "rdx"; "rbx"; "rsp"; "rbp"; "rsi"; "rdi"; "r8"; "r9"; "r10"; "r11"; "r12"; "r13"; "r14"; "r15";|]
+    let dword_names = [|"eax"; "ecx"; "edx"; "ebx"; "esp"; "ebp"; "esi"; "edi"; "r8d"; "r9d"; "r10d"; "r11d"; "r12d"; "r13d"; "r14d"; "r15d";|]
+    let word_names = [|"ax"; "cx"; "dx"; "bx"; "sp"; "bp"; "si"; "di"; "r8w"; "r9w"; "r10w"; "r11w"; "r12w"; "r13w"; "r14w"; "r15w";|]
+    let byte_names = [|"al"; "cl"; "dl"; "bl"; "spl"; "bpl"; "sil"; "dil"; "r8b"; "r9b"; "r10b"; "r11b"; "r12b"; "r13b"; "r14b"; "r15b";|]
 
-    let to_string (Virt n) = begin
+    let to_string width (Virt n) = begin
         assert (n >= 0);
         if n < 16 then
-            register_names.(n)
+            match width with
+            | W64 -> qword_names.(n)
+            | W32 -> dword_names.(n)
+            | W16 -> word_names.(n)
+            | W8 -> byte_names.(n)
         else
             "v" ^ Int.to_string n
     end
@@ -61,20 +78,10 @@ module XmmReg = struct
     let xmm15 = Virt 31
 end
 
-type int_width =
-    | W8
-    | W16
-    | W32
-    | W64
-
-type float_width =
-    | F32
-    | F64
-
 type mem_address =
     | AddrB of {base: IntReg.t;}
-    | AddrBD of {base: IntReg.t; displacement: int32;}
-    | AddrSIBD of {scale: int; index: IntReg.t; base: IntReg.t; displacement: int32;}
+    | AddrBD of {base: IntReg.t; disp: int32;}
+    | AddrSIBD of {scale: int; index: IntReg.t; base: IntReg.t; disp: int32;}
     | AddrSymbol of string
 
 type 'a reg_mem =
@@ -111,7 +118,7 @@ type label_id = int
 type condition_code = string
 
 type inst =
-    | UnaryOp of ibinop * int_width * IntReg.t reg_mem
+    | UnaryOp of iunaryop * int_width * IntReg.t reg_mem
     | BinOp of ibinop * int_width * IntReg.t reg_mem * reg_mem_imm
     | FBinOp of fbinop * float_width * XmmReg.t * XmmReg.t reg_mem
     | CvtFloatToFloat of float_width * XmmReg.t * float_width * XmmReg.t reg_mem
@@ -130,6 +137,86 @@ type inst =
     | Jcc of condition_code * label_id
     | Setcc of condition_code * IntReg.t
 
+let ibinop_to_string op =
+    match op with
+    | Add -> "add"
+    | Sub -> "sub"
+    | Mul -> "mul"
+    | And -> "and"
+    | Or -> "or"
+    | Xor -> "xor"
+    | Shl -> "shl"
+    | Shr -> "shr"
+    | Sar -> "sar"
+
+let iunaryop_to_string op =
+    match op with
+    | Not -> "not"
+    | Neg -> "neg"
+
+let float_width_to_string width =
+    match width with
+    | F32 -> "ss"
+    | F64 -> "sd"
+
+let fbinop_to_string op width =
+    let suffix = float_width_to_string width in
+    match op with
+    | FAdd -> "add" ^ suffix
+    | FSub -> "sub" ^ suffix
+    | FMul -> "mul" ^ suffix
+    | FDiv -> "div" ^ suffix
+    | FXor -> "xor" ^ suffix
+
+let mem_address_to_string m =
+    match m with
+    | AddrB {base} -> sprintf "[%s]" (IntReg.to_string W64 base)
+    | AddrBD {base; disp} -> sprintf "[%s + %ld]" (IntReg.to_string W64 base) disp
+    | AddrSIBD {scale; index; base; disp} -> sprintf "[%s + %d*%s + %ld]" (IntReg.to_string W64 base) scale (IntReg.to_string W64 index) disp
+    | AddrSymbol sym -> sprintf "[%s]" sym
+
+let int_reg_mem_to_string width operand =
+    match operand with
+    | Reg r -> IntReg.to_string width r
+    | Memory m -> mem_address_to_string m
+
+let int_reg_mem_imm_to_string width operand =
+    match operand with
+    | Imm32 imm -> Int32.to_string imm
+    | RegMem regmem -> int_reg_mem_to_string width regmem
+
+let xmm_reg_mem_to_string operand =
+    match operand with
+    | Reg r -> XmmReg.to_string r
+    | Memory m -> mem_address_to_string m
+
+let cqo_or_cdq width =
+    match width with
+    | W64 -> "cqo"
+    | W32 -> "cdq"
+    | W16 | W8 -> failwith "Can only do 64-bit or 32-bit divides right now"
+
+let inst_to_buffer buf inst = begin
+    match inst with
+    | UnaryOp (op, width, operand) -> bprintf buf "\t%s %s\n" (iunaryop_to_string op) (int_reg_mem_to_string width operand)
+    | BinOp (op, width, lhs, rhs) -> bprintf buf "\t%s %s, %s\n" (ibinop_to_string op) (int_reg_mem_to_string width lhs) (int_reg_mem_imm_to_string width rhs)
+    | FBinOp (op, width, lhs, rhs) -> bprintf buf "\t%s %s, %s\n" (fbinop_to_string op width) (XmmReg.to_string lhs) (xmm_reg_mem_to_string rhs)
+    | CvtFloatToFloat (dest_width, dest, src_width, src) -> bprintf buf "\tcvt%s%,2%s %s, %s\n" (float_width_to_string dest_width) (float_width_to_string dest_width) (XmmReg.to_string dest) (xmm_reg_mem_to_string src)
+    | CvtFloatToInt (dest_width, dest, src_width, src) -> bprintf buf "\tcvt%s%,2si %s, %s\n" (float_width_to_string src_width) (IntReg.to_string dest_width dest) (xmm_reg_mem_to_string src)
+    | CvtIntToFloat (dest_width, dest, src_width, src) -> bprintf buf "\tcvtsi2%s %s, %s\n" (float_width_to_string dest_width) (XmmReg.to_string dest) (int_reg_mem_to_string src_width src)
+    | Mov (width, dest, src) -> bprintf buf "\tmov %s, %s" (int_reg_mem_to_string width dest) (int_reg_mem_imm_to_string width src)
+    | MovImm64 (dest, imm) -> bprintf buf "\tmov %s, %Ld" (IntReg.to_string W64 dest) imm
+    | Lea (dest, addr) -> bprintf buf "\tlea %s, %s" (IntReg.to_string W64 dest) (mem_address_to_string addr)
+    | SignExtendRaxToRdx int_width -> bprintf buf "\t%s\n" (cqo_or_cdq int_width)
+    | Div (width, divisor) -> bprintf buf "\tidiv %s\n" (int_reg_mem_to_string width divisor)
+    | UnsignedDiv (width, divisor) -> bprintf buf "\tdiv %s\n" (int_reg_mem_to_string width divisor)
+    | Cmp (width, lhs, rhs) -> bprintf buf "\tcmp %s, %s\n" (int_reg_mem_to_string width lhs) (int_reg_mem_imm_to_string width rhs)
+    | Comi (width, lhs, rhs) -> bprintf buf "\tcomi%s %s, %s\n" (float_width_to_string width) (XmmReg.to_string lhs) (xmm_reg_mem_to_string rhs)
+    | Label label_id -> bprintf buf ".L%d:\n" label_id
+    | Jmp label_id -> bprintf buf "\tjmp .L%d:\n" label_id
+    | Jcc (condition_code, label_id) -> bprintf buf "\tj%s .L%d:\n" condition_code label_id
+    | Setcc (condition_code, dest) -> bprintf buf "\tset%s %s\n" condition_code (IntReg.to_string W8 dest)
+end
 
 let integer_call_registers = [|"rdi"; "rsi"; "rdx"; "rcx"; "r8"; "r9"|]
 let float_call_registers = [|"xmm0"; "xmm1"; "xmm2"; "xmm3"; "xmm4"; "xmm5"; "xmm6"; "xmm7"|]
