@@ -379,7 +379,7 @@ let emit ir_comp_unit =
 
     (* dword constants *)
     Buffer.add_string ob "align 4\n";
-    Hashtbl.iter (fun n () -> bprintf ob "__minicc_constant_dword_%lu: dq %lu\n" n n) constants.dwords;
+    Hashtbl.iter (fun n () -> bprintf ob "__minicc_constant_dword_%lu: dd %lu\n" n n) constants.dwords;
 
     (* String constants *)
     Hashtbl.iter (fun lit id ->
