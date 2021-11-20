@@ -6,7 +6,6 @@ let should_not_compile msg fragment =
     with Ast.Compile_error _ -> ()
 
 let run_all () =
-    Liveness.tests ();
     Regalloc.tests ();
     Ir.tests ();
     Ast.tests ();

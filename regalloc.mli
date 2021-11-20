@@ -1,8 +1,5 @@
-type t
+include module type of Regalloc_types
 
-val create : int -> t
-val precolor : t -> int -> int -> unit
-val interferes_with : t -> int -> int -> unit
-val allocate : t -> int array
+val allocate : inst list -> int -> (virt_reg, phys_reg) Hashtbl.t -> phys_reg array
 
 val tests : unit -> unit
