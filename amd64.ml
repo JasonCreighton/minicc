@@ -2,6 +2,135 @@ open Printf
 
 exception Compile_error of string
 
+module IntReg = struct
+    type t = Virt of int [@@unboxed]
+    let register_names = [|"rax"; "rcx"; "rdx"; "rbx"; "rsp"; "rbp"; "rsi"; "rdi"; "r8"; "r9"; "r10"; "r11"; "r12"; "r13"; "r14"; "r15";|]
+
+    let to_string (Virt n) = begin
+        assert (n >= 0);
+        if n < 16 then
+            register_names.(n)
+        else
+            "v" ^ Int.to_string n
+    end
+
+    let rax = Virt 0
+    let rcx = Virt 1
+    let rdx = Virt 2
+    let rbx = Virt 3
+    let rsp = Virt 4
+    let rbp = Virt 5
+    let rsi = Virt 6
+    let rdi = Virt 7
+    let r8 = Virt 8
+    let r9 = Virt 9
+    let r10 = Virt 10
+    let r11 = Virt 11
+    let r12 = Virt 12
+    let r13 = Virt 13
+    let r14 = Virt 14
+    let r15 = Virt 15
+end
+
+module XmmReg = struct
+    type t = Virt of int [@@unboxed]
+
+    let to_string (Virt n) = begin
+        assert (n >= 16);
+        if n < 32 then
+            "xmm" ^ (Int.to_string (n - 16))
+        else
+            "v" ^ Int.to_string n
+    end
+
+    let xmm0 = Virt 16
+    let xmm1 = Virt 17
+    let xmm2 = Virt 18
+    let xmm3 = Virt 19
+    let xmm4 = Virt 20
+    let xmm5 = Virt 21
+    let xmm6 = Virt 22
+    let xmm7 = Virt 23
+    let xmm8 = Virt 24
+    let xmm9 = Virt 25
+    let xmm10 = Virt 26
+    let xmm11 = Virt 27
+    let xmm12 = Virt 28
+    let xmm13 = Virt 29
+    let xmm14 = Virt 30
+    let xmm15 = Virt 31
+end
+
+type int_width =
+    | W8
+    | W16
+    | W32
+    | W64
+
+type float_width =
+    | F32
+    | F64
+
+type mem_address =
+    | AddrB of {base: IntReg.t;}
+    | AddrBD of {base: IntReg.t; displacement: int32;}
+    | AddrSIBD of {scale: int; index: IntReg.t; base: IntReg.t; displacement: int32;}
+    | AddrSymbol of string
+
+type 'a reg_mem =
+    | Reg of 'a
+    | Memory of mem_address
+
+type reg_mem_imm =
+    | Imm32 of int32
+    | RegMem of IntReg.t reg_mem
+
+type ibinop =
+    | Add
+    | Sub
+    | Mul
+    | And
+    | Or
+    | Xor
+    | Shl
+    | Shr
+    | Sar
+
+type iunaryop =
+    | Neg
+    | Not
+
+type fbinop =
+    | FAdd
+    | FSub
+    | FMul
+    | FDiv
+    | FXor
+
+type label_id = int
+type condition_code = string
+
+type inst =
+    | UnaryOp of ibinop * int_width * IntReg.t reg_mem
+    | BinOp of ibinop * int_width * IntReg.t reg_mem * reg_mem_imm
+    | FBinOp of fbinop * float_width * XmmReg.t * XmmReg.t reg_mem
+    | CvtFloatToFloat of float_width * XmmReg.t * float_width * XmmReg.t reg_mem
+    | CvtFloatToInt of int_width * IntReg.t * float_width * XmmReg.t reg_mem
+    | CvtIntToFloat of float_width * XmmReg.t * int_width * IntReg.t reg_mem
+    | Mov of int_width * IntReg.t reg_mem * reg_mem_imm
+    | MovImm64 of IntReg.t * int64
+    | Lea of IntReg.t * mem_address
+    | SignExtendRaxToRdx of int_width (* cqo/cdq *)
+    | Div of int_width * IntReg.t reg_mem
+    | UnsignedDiv of int_width * IntReg.t reg_mem
+    | Cmp of int_width * IntReg.t reg_mem * reg_mem_imm
+    | Comi of float_width * XmmReg.t * XmmReg.t reg_mem
+    | Label of label_id
+    | Jmp of label_id
+    | Jcc of condition_code * label_id
+    | Setcc of condition_code * IntReg.t
+
+
 let integer_call_registers = [|"rdi"; "rsi"; "rdx"; "rcx"; "r8"; "r9"|]
 let float_call_registers = [|"xmm0"; "xmm1"; "xmm2"; "xmm3"; "xmm4"; "xmm5"; "xmm6"; "xmm7"|]
 
