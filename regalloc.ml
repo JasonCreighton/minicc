@@ -138,13 +138,14 @@ let create_ifg insts num_virtuals bit_live_out = begin
     ifg
 end
 
-let color_ifg ifg num_virtuals assignments = begin
-    let available_phys_regs = Array.make num_virtuals true in
+let color_ifg ifg num_physical num_virtuals assignments = begin
+    let available_phys_regs = Array.make num_physical true in
+    let spills = ref [] in
     for virt_reg = 0 to num_virtuals - 1 do
         (* If virt_reg is not yet assigned *)
         if assignments.(virt_reg) = (-1) then begin
             (* Reset set of available registers *)
-            Array.fill available_phys_regs 0 num_virtuals true;
+            Array.fill available_phys_regs 0 num_physical true;
 
             (* Find conflicting virtuals that have already been assigned and
             remove their physical registers from the set of avaialble
@@ -159,24 +160,34 @@ let color_ifg ifg num_virtuals assignments = begin
 
             (* Assign lowest-numbered available physical register *)
             let phys_idx = ref 0 in
-            let quit = ref false in
-            while not !quit do
-                if available_phys_regs.(!phys_idx) then
-                    quit := true
-                else
+            let assigned = ref false in
+            while not !assigned && !phys_idx < num_physical do
+                if available_phys_regs.(!phys_idx) then begin
+                    (* Assign register *)
+                    assignments.(virt_reg) <- !phys_idx;
+                    assigned := true;
+                end else begin
                     phys_idx := !phys_idx + 1
+                end
             done;
 
-            (* Assign register *)
-            assignments.(virt_reg) <- !phys_idx;
+            (* Could not assign register, spill it *)
+            if not !assigned then
+                spills := virt_reg :: !spills;
         end;
     done;
 
-    check_coloring ifg assignments num_virtuals;
+    if !spills = [] then begin
+        check_coloring ifg assignments num_virtuals;
+        Allocation assignments
+    end else begin
+        Spills !spills
+    end
 end
 
-let allocate insts num_virtuals precolorings = begin
+let allocate num_physical reg_classes insts = begin
     let num_insts = List.length insts in
+    let num_virtuals = Array.length reg_classes in
 
     (* Convert instructions into bitvector use/def information *)
     let bit_defs, bit_uses = find_bit_defs_and_uses insts num_insts num_virtuals in
@@ -188,15 +199,19 @@ let allocate insts num_virtuals precolorings = begin
     (* Generate interference graph *)
     let ifg = create_ifg insts num_virtuals bit_live_out in
 
-    (* Precolor registers *)
-    let assignments = Array.make num_virtuals (-1) in
-    Hashtbl.iter (fun virt phys -> assignments.(virt) <- phys) precolorings;
+    (* Registers in the range [0, num_physical) are precolored to a single physical register *)
+    let assignments = Array.init num_virtuals (fun i -> if i < num_physical then i else (-1)) in
 
-    (* Color graph *)
-    color_ifg ifg num_virtuals assignments;
+    (* Add edges in the interference graph to account for register classes *)
+    Array.iteri (fun reg_idx {from_idx; to_idx} ->
+        for phys_reg_idx = 0 to num_physical - 1 do
+            if not (phys_reg_idx >= from_idx && phys_reg_idx <= to_idx) then
+                interferes_with ifg reg_idx phys_reg_idx;
+        done;
+    ) reg_classes;
 
-    (* We're done, return coloring *)
-    assignments;
+    (* Color graph and return either assignments or spill list *)
+    color_ifg ifg num_physical num_virtuals assignments;
 end
 
 let random_ifg num_virtuals num_edges = begin
@@ -269,6 +284,9 @@ end
 
 let test_random_ifg () = begin
     let num_virtuals = 50 in
+    (* Unless the graph is total, I think there should always be at least one
+    virtual that can share another physical registers *)
+    let num_physical = num_virtuals - 1 in
     let num_edges = 1000 in
     let num_runs = 10 in
 
@@ -282,7 +300,11 @@ let test_random_ifg () = begin
         assignments.(precolored_virtual_idx) <- 0;
 
         (* color_ifg will call check_coloring *)
-        color_ifg ifg num_virtuals assignments;
+        let assignments = 
+            match color_ifg ifg num_physical num_virtuals assignments with
+            | Allocation assignments -> assignments
+            | Spills _ -> failwith "Should not have had to spill"
+        in
 
         (* Check precoloring *)
         assert (assignments.(precolored_virtual_idx) = 0);
@@ -294,9 +316,8 @@ let test_random_ifg () = begin
         register 0 used somewhere. *)
         assert (min_phys_reg = 0);
 
-        (* Unless the graph is total, I think there should always be at least
-        one virtual that can share another physical registers. *)
-        assert (max_phys_reg < (num_virtuals - 1));
+        (* Max register used should be in range *)
+        assert (max_phys_reg < num_physical);
     done;
 end
 
