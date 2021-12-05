@@ -85,17 +85,22 @@ type mem_address =
     | AddrSymbol of string
 
 type memory = [`Memory of mem_address]
-type int_reg_mem = [`IntReg of int | memory]
+type int_reg_mem = [IntReg.t | memory]
 type int_reg_mem_imm = [int_reg_mem | `Imm32 of int32]
+type int_reg_imm = [IntReg.t | `Imm32 of int32]
 type xmm_reg_mem = [`XmmReg of int | memory]
 
 type ibinop =
+    | Mov
+    | Cmp
     | Add
     | Sub
     | Mul
     | And
     | Or
     | Xor
+
+type ishiftop =
     | Shl
     | Shr
     | Sar
@@ -116,22 +121,23 @@ type condition_code = string
 
 type inst =
     | UnaryOp of iunaryop * int_width * int_reg_mem
-    | BinOp of ibinop * int_width * int_reg_mem * int_reg_mem_imm
+    | BinOpR of ibinop * int_width * IntReg.t * int_reg_mem_imm
+    | BinOpM of ibinop * int_width * memory * int_reg_imm
+    | ShiftOp of ishiftop * int_width * int_reg_mem * [`CL | `Imm8 of int ]
     | FBinOp of fbinop * float_width * XmmReg.t * xmm_reg_mem
     | CvtFloatToFloat of float_width * XmmReg.t * float_width * xmm_reg_mem
     | CvtFloatToInt of int_width * IntReg.t * float_width * xmm_reg_mem
     | CvtIntToFloat of float_width * XmmReg.t * int_width * int_reg_mem
-    | Mov of int_width * int_reg_mem * int_reg_mem_imm
     | Movsx of int_width * IntReg.t * int_width * int_reg_mem
     | Movzx of int_width * IntReg.t * int_width * int_reg_mem
     | MovImm64 of IntReg.t * int64
-    | FMov of float_width * xmm_reg_mem * xmm_reg_mem
+    | FMovR of float_width * XmmReg.t * xmm_reg_mem
+    | FMovM of float_width * memory * XmmReg.t
     | Lea of IntReg.t * mem_address
     | SignExtendRaxToRdx of int_width (* cqo/cdq *)
     | Div of int_width * int_reg_mem
     | UnsignedDiv of int_width * int_reg_mem
     | Call of string
-    | Cmp of int_width * int_reg_mem * int_reg_mem_imm
     | Comi of float_width * XmmReg.t * xmm_reg_mem
     | Label of label_id
     | Jmp of label_id
@@ -141,12 +147,17 @@ type inst =
 
 let ibinop_to_string op =
     match op with
+    | Mov -> "mov"
+    | Cmp -> "cmp"
     | Add -> "add"
     | Sub -> "sub"
     | Mul -> "imul"
     | And -> "and"
     | Or -> "or"
     | Xor -> "xor"
+
+let ishiftop_to_string op =
+    match op with
     | Shl -> "shl"
     | Shr -> "shr"
     | Sar -> "sar"
@@ -182,6 +193,8 @@ let int_operand_to_string width operand =
     | `IntReg _ as r -> IntReg.to_string width r
     | `Memory addr -> mem_address_to_string addr
     | `Imm32 imm -> Int32.to_string imm
+    | `Imm8 imm -> Int.to_string imm
+    | `CL -> "cl"
 
 let xmm_operand_to_string operand =
     match operand with
@@ -204,23 +217,23 @@ let width_to_string width =
 let inst_to_buffer buf inst = begin
     match inst with
     | UnaryOp (op, width, operand) -> bprintf buf "\t%s %s\n" (iunaryop_to_string op) (int_operand_to_string width operand)
-    | BinOp ((Shl | Shr | Sar) as op, width, lhs, rhs) -> bprintf buf "\t%s %s, %s\n" (ibinop_to_string op) (int_operand_to_string width lhs) (int_operand_to_string W8 rhs)
-    | BinOp (op, width, lhs, rhs) -> bprintf buf "\t%s %s, %s\n" (ibinop_to_string op) (int_operand_to_string width lhs) (int_operand_to_string width rhs)
+    | ShiftOp (op, width, lhs, rhs) -> bprintf buf "\t%s %s, %s\n" (ishiftop_to_string op) (int_operand_to_string width lhs) (int_operand_to_string W8 rhs)
+    | BinOpR (op, width, lhs, rhs) -> bprintf buf "\t%s %s, %s\n" (ibinop_to_string op) (int_operand_to_string width lhs) (int_operand_to_string width rhs)
+    | BinOpM (op, width, lhs, rhs) -> bprintf buf "\t%s %s, %s\n" (ibinop_to_string op) (int_operand_to_string width lhs) (int_operand_to_string width rhs)
     | FBinOp (op, width, lhs, rhs) -> bprintf buf "\t%s %s, %s\n" (fbinop_to_string op width) (XmmReg.to_string lhs) (xmm_operand_to_string rhs)
     | CvtFloatToFloat (dest_width, dest, src_width, src) -> bprintf buf "\tcvt%s%,2%s %s, %s\n" (float_width_to_string src_width) (float_width_to_string dest_width) (XmmReg.to_string dest) (xmm_operand_to_string src)
     | CvtFloatToInt (dest_width, dest, src_width, src) -> bprintf buf "\tcvt%s%,2si %s, %s\n" (float_width_to_string src_width) (IntReg.to_string dest_width dest) (xmm_operand_to_string src)
     | CvtIntToFloat (dest_width, dest, src_width, src) -> bprintf buf "\tcvtsi2%s %s, %s\n" (float_width_to_string dest_width) (XmmReg.to_string dest) (int_operand_to_string src_width src)
-    | Mov (width, dest, src) -> bprintf buf "\tmov %s, %s\n" (int_operand_to_string width dest) (int_operand_to_string width src)
     | Movsx (dest_width, dest, src_width, src) -> bprintf buf "\tmovsx %s, %s %s\n" (IntReg.to_string dest_width dest) (width_to_string src_width) (int_operand_to_string src_width src)
     | Movzx (dest_width, dest, src_width, src) -> bprintf buf "\tmovzx %s, %s %s\n" (IntReg.to_string dest_width dest) (width_to_string src_width) (int_operand_to_string src_width src)
     | MovImm64 (dest, imm) -> bprintf buf "\tmov %s, %Ld\n" (IntReg.to_string W64 dest) imm
-    | FMov (width, dest, src) -> bprintf buf "\tmov%s %s, %s\n" (float_width_to_string width) (xmm_operand_to_string dest) (xmm_operand_to_string src)
+    | FMovR (width, dest, src) -> bprintf buf "\tmov%s %s, %s\n" (float_width_to_string width) (xmm_operand_to_string dest) (xmm_operand_to_string src)
+    | FMovM (width, dest, src) -> bprintf buf "\tmov%s %s, %s\n" (float_width_to_string width) (xmm_operand_to_string dest) (xmm_operand_to_string src)
     | Lea (dest, addr) -> bprintf buf "\tlea %s, %s\n" (IntReg.to_string W64 dest) (mem_address_to_string addr)
     | SignExtendRaxToRdx int_width -> bprintf buf "\t%s\n" (cqo_or_cdq int_width)
     | Div (width, divisor) -> bprintf buf "\tidiv %s\n" (int_operand_to_string width divisor)
     | UnsignedDiv (width, divisor) -> bprintf buf "\tdiv %s\n" (int_operand_to_string width divisor)
     | Call func -> bprintf buf "\tcall %s\n" func
-    | Cmp (width, lhs, rhs) -> bprintf buf "\tcmp %s, %s\n" (int_operand_to_string width lhs) (int_operand_to_string width rhs)
     | Comi (width, lhs, rhs) -> bprintf buf "\tcomi%s %s, %s\n" (float_width_to_string width) (XmmReg.to_string lhs) (xmm_operand_to_string rhs)
     | Label label_id -> bprintf buf ".L%d:\n" label_id
     | Jmp label_id -> bprintf buf "\tjmp .L%d\n" label_id
@@ -293,7 +306,7 @@ let emit_func func_table constants ir_func =
         (match typ with
         | Ir.F32 -> asm @@ Comi (F32, XmmReg.xmm0, XmmReg.xmm1)
         | Ir.F64 -> asm @@ Comi (F64, XmmReg.xmm0, XmmReg.xmm1)
-        | _ -> asm @@ Cmp (W64, IntReg.rax, IntReg.rcx)
+        | _ -> asm @@ BinOpR (Cmp, W64, IntReg.rax, IntReg.rcx)
         );
 
         asm @@ Setcc (condition_code, IntReg.rax);
@@ -301,27 +314,27 @@ let emit_func func_table constants ir_func =
     end in
     let push_acc typ = begin
         (* TODO: Don't want to encode push/pop because I think eventually we won't use it *)
-        asm @@ BinOp (Sub, W64, IntReg.rsp, `Imm32 8l);
+        asm @@ BinOpR (Sub, W64, IntReg.rsp, `Imm32 8l);
         if Ir.is_integer typ
-        then asm @@ Mov (W64, `Memory (AddrB {base=IntReg.rsp}), IntReg.rax)
-        else asm @@ FMov (F64, `Memory (AddrB {base=IntReg.rsp}), XmmReg.xmm0)
+        then asm @@ BinOpM (Mov, W64, `Memory (AddrB {base=IntReg.rsp}), IntReg.rax)
+        else asm @@ FMovM (F64, `Memory (AddrB {base=IntReg.rsp}), XmmReg.xmm0)
     end in
     let pop_int dest = begin
-        asm @@ Mov (W64, dest, `Memory (AddrB {base=IntReg.rsp}));
-        asm @@ BinOp (Add, W64, IntReg.rsp, `Imm32 8l);
+        asm @@ BinOpR (Mov, W64, dest, `Memory (AddrB {base=IntReg.rsp}));
+        asm @@ BinOpR (Add, W64, IntReg.rsp, `Imm32 8l);
     end in
     let pop_float dest = begin
-        asm @@ FMov (F64, dest, `Memory (AddrB {base=IntReg.rsp}));
-        asm @@ BinOp (Add, W64, IntReg.rsp, `Imm32 8l);
+        asm @@ FMovR (F64, dest, `Memory (AddrB {base=IntReg.rsp}));
+        asm @@ BinOpR (Add, W64, IntReg.rsp, `Imm32 8l);
     end in
     let store_acc typ dest_addr =
         match typ with
-        | Ir.F64 -> asm @@ FMov (F64, `Memory dest_addr, XmmReg.xmm0)
-        | Ir.F32 -> asm @@ FMov (F32, `Memory dest_addr, XmmReg.xmm0)
-        | Ir.I8 | Ir.U8 -> asm @@ Mov (W8, `Memory dest_addr, IntReg.rax)
-        | Ir.I16 | Ir.U16 -> asm @@ Mov (W16, `Memory dest_addr, IntReg.rax)
-        | Ir.I32 | Ir.U32 -> asm @@ Mov (W32, `Memory dest_addr, IntReg.rax)
-        | Ir.I64 | Ir.U64 | Ir.Ptr -> asm @@ Mov (W64, `Memory dest_addr, IntReg.rax)
+        | Ir.F64 -> asm @@ FMovM (F64, `Memory dest_addr, XmmReg.xmm0)
+        | Ir.F32 -> asm @@ FMovM (F32, `Memory dest_addr, XmmReg.xmm0)
+        | Ir.I8 | Ir.U8 -> asm @@ BinOpM (Mov, W8, `Memory dest_addr, IntReg.rax)
+        | Ir.I16 | Ir.U16 -> asm @@ BinOpM (Mov, W16, `Memory dest_addr, IntReg.rax)
+        | Ir.I32 | Ir.U32 -> asm @@ BinOpM (Mov, W32, `Memory dest_addr, IntReg.rax)
+        | Ir.I64 | Ir.U64 | Ir.Ptr -> asm @@ BinOpM (Mov, W64, `Memory dest_addr, IntReg.rax)
     in
     (* Recursive walk functions *)
     let rec emit_inst inst =
@@ -364,15 +377,15 @@ let emit_func func_table constants ir_func =
                 (* TODO: Pickup conversion here *)
 
                 (* FIXME: Terrible hack to align stack to 16 bytes before calling library function, this should be done statically *)
-                asm @@ Mov (W64, IntReg.rbx, IntReg.rsp); (* Save old stack pointer in callee-save register *)
-                asm @@ BinOp (And, W64, IntReg.rsp, `Imm32 (-16l));       (* Align stack *)
+                asm @@ BinOpR (Mov, W64, IntReg.rbx, IntReg.rsp); (* Save old stack pointer in callee-save register *)
+                asm @@ BinOpR (And, W64, IntReg.rsp, `Imm32 (-16l));       (* Align stack *)
 
                 (* Varargs functions need the number of vector registers used in "al". TODO: Only do this when calling varargs functions. *)
-                asm @@ Mov (W32, IntReg.rax, `Imm32 (Int32.of_int !float_idx));
+                asm @@ BinOpR (Mov, W32, IntReg.rax, `Imm32 (Int32.of_int !float_idx));
 
                 (* TODO: Kind of a hack to embed the PLT reference in the function name like this *)
                 asm @@ Call (func_name ^ " WRT ..plt");
-                asm @@ Mov (W64, IntReg.rsp, IntReg.rbx); (* Restore old stack pointer *) 
+                asm @@ BinOpR (Mov, W64, IntReg.rsp, IntReg.rbx); (* Restore old stack pointer *) 
             );
 
             (* Optionally save result of call to a local *)
@@ -382,7 +395,7 @@ let emit_func func_table constants ir_func =
         | Ir.Jump label_id -> asm @@ Jmp label_id
         | Ir.JumpIf (label_id, cond) -> begin
             emit_expr cond |> ignore;
-            asm @@ Cmp (W64, IntReg.rax, `Imm32 0l);
+            asm @@ BinOpR (Cmp, W64, IntReg.rax, `Imm32 0l);
             asm @@ Jcc ("ne", label_id);
         end
         | Ir.Return expr_opt ->
@@ -403,22 +416,22 @@ let emit_func func_table constants ir_func =
 
         let signed = Ir.is_signed lhs_t in
         (match op with
-        | Ir.Add -> asm @@ BinOp (Add, W64, IntReg.rax, IntReg.rcx)
-        | Ir.Sub -> asm @@ BinOp (Sub, W64, IntReg.rax, IntReg.rcx)
-        | Ir.Mul -> asm @@ BinOp (Mul, W64, IntReg.rax, IntReg.rcx)
+        | Ir.Add -> asm @@ BinOpR (Add, W64, IntReg.rax, IntReg.rcx)
+        | Ir.Sub -> asm @@ BinOpR (Sub, W64, IntReg.rax, IntReg.rcx)
+        | Ir.Mul -> asm @@ BinOpR (Mul, W64, IntReg.rax, IntReg.rcx)
         | Ir.Div | Ir.Rem -> begin
             if signed then
                 (asm @@ SignExtendRaxToRdx W64; asm @@ Div (W64, IntReg.rcx))
             else
-                (asm @@ BinOp (Xor, W64, IntReg.rdx, IntReg.rdx); asm @@ UnsignedDiv (W64, IntReg.rcx))
+                (asm @@ BinOpR (Xor, W64, IntReg.rdx, IntReg.rdx); asm @@ UnsignedDiv (W64, IntReg.rcx))
             ;
-            if op = Ir.Rem then asm @@ Mov (W64, IntReg.rax, IntReg.rdx);
+            if op = Ir.Rem then asm @@ BinOpR (Mov, W64, IntReg.rax, IntReg.rdx);
         end
-        | Ir.And -> asm @@ BinOp (And, W64, IntReg.rax, IntReg.rcx)
-        | Ir.Or -> asm @@ BinOp (Or, W64, IntReg.rax, IntReg.rcx)
-        | Ir.Xor -> asm @@ BinOp (Xor, W64, IntReg.rax, IntReg.rcx)
-        | Ir.ShiftLeft -> asm @@ BinOp (Shl, W64, IntReg.rax, IntReg.rcx)
-        | Ir.ShiftRight -> asm @@ BinOp ((if signed then Sar else Shr), W64, IntReg.rax, IntReg.rcx)
+        | Ir.And -> asm @@ BinOpR (And, W64, IntReg.rax, IntReg.rcx)
+        | Ir.Or -> asm @@ BinOpR (Or, W64, IntReg.rax, IntReg.rcx)
+        | Ir.Xor -> asm @@ BinOpR (Xor, W64, IntReg.rax, IntReg.rcx)
+        | Ir.ShiftLeft -> asm @@ ShiftOp (Shl, W64, IntReg.rax, `CL)
+        | Ir.ShiftRight -> asm @@ ShiftOp ((if signed then Sar else Shr), W64, IntReg.rax, `CL)
         | Ir.CompEQ -> materialize_comparison lhs_t "e"
         | Ir.CompNEQ -> materialize_comparison lhs_t "ne"
         | Ir.CompLT -> materialize_comparison lhs_t (if signed then "l" else "b")
@@ -439,7 +452,7 @@ let emit_func func_table constants ir_func =
         | Ir.I32 -> asm @@ Movsx (W64, IntReg.rax, W32, IntReg.rax)
         | Ir.U8 -> asm @@ Movzx (W64, IntReg.rax, W8, IntReg.rax)
         | Ir.U16 -> asm @@ Movsx (W64, IntReg.rax, W16, IntReg.rax)
-        | Ir.U32 -> asm @@ Mov (W32, IntReg.rax, IntReg.rax)
+        | Ir.U32 -> asm @@ BinOpR (Mov, W32, IntReg.rax, IntReg.rax)
         | Ir.I64 | Ir.U64 | Ir.Ptr -> ()
         | Ir.F32 | Ir.F64 -> failwith "Shouldn't have float types in emit_int_binop"
         );
@@ -480,8 +493,8 @@ let emit_func func_table constants ir_func =
     and emit_expr expr =
         match expr with
         | Ir.ConstInt (typ, n) -> asm @@ MovImm64 (IntReg.rax, n); typ
-        | Ir.ConstFloat (Ir.F64, n) -> asm @@ FMov (F64, XmmReg.xmm0, `Memory (address_of_constant_qword constants.qwords (Int64.bits_of_float n))); Ir.F64
-        | Ir.ConstFloat (Ir.F32, n) -> asm @@ FMov (F32, XmmReg.xmm0, `Memory (address_of_constant_dword constants.dwords (Int32.bits_of_float n))); Ir.F32
+        | Ir.ConstFloat (Ir.F64, n) -> asm @@ FMovR (F64, XmmReg.xmm0, `Memory (address_of_constant_qword constants.qwords (Int64.bits_of_float n))); Ir.F64
+        | Ir.ConstFloat (Ir.F32, n) -> asm @@ FMovR (F32, XmmReg.xmm0, `Memory (address_of_constant_dword constants.dwords (Int32.bits_of_float n))); Ir.F32
         | Ir.ConstFloat (_, _) -> failwith "Invalid type for ConstFloat"
         | Ir.ConstStringAddr s -> asm @@ Lea (IntReg.rax, AddrSymbol ("__minicc_constant_string_" ^ Int.to_string (id_of_string_lit constants.strings s))); Ir.Ptr
         | Ir.LocalAddr local_id -> asm @@ Lea (IntReg.rax, AddrBD {base = IntReg.rbp; disp = Int32.of_int (find_local_offset local_id)}); Ir.Ptr
@@ -495,10 +508,10 @@ let emit_func func_table constants ir_func =
                 | Ir.I32 -> asm @@ Movsx (W64, IntReg.rax, W32, `Memory (AddrB {base = IntReg.rax}))
                 | Ir.U8 -> asm @@ Movzx (W64, IntReg.rax, W8, `Memory (AddrB {base = IntReg.rax}))
                 | Ir.U16 -> asm @@ Movzx (W64, IntReg.rax, W16, `Memory (AddrB {base = IntReg.rax}))
-                | Ir.U32 -> asm @@ Mov (W32, IntReg.rax, `Memory (AddrB {base = IntReg.rax}))
-                | Ir.I64 | Ir.U64 | Ir.Ptr -> asm @@ Mov (W64, IntReg.rax, `Memory (AddrB {base = IntReg.rax}))
-                | Ir.F32 -> asm @@ FMov (F32, XmmReg.xmm0, `Memory (AddrB {base = IntReg.rax}))
-                | Ir.F64 -> asm @@ FMov (F64, XmmReg.xmm0, `Memory (AddrB {base = IntReg.rax}))
+                | Ir.U32 -> asm @@ BinOpR (Mov, W32, IntReg.rax, `Memory (AddrB {base = IntReg.rax}))
+                | Ir.I64 | Ir.U64 | Ir.Ptr -> asm @@ BinOpR (Mov, W64, IntReg.rax, `Memory (AddrB {base = IntReg.rax}))
+                | Ir.F32 -> asm @@ FMovR (F32, XmmReg.xmm0, `Memory (AddrB {base = IntReg.rax}))
+                | Ir.F64 -> asm @@ FMovR (F64, XmmReg.xmm0, `Memory (AddrB {base = IntReg.rax}))
             );
 
             typ
@@ -518,11 +531,11 @@ let emit_func func_table constants ir_func =
                 zero instead of positive zero. *)
                 (match typ with
                 | Ir.F32 -> begin
-                    asm @@ FMov (F32, XmmReg.xmm1, `Memory (address_of_constant_dword constants.dwords (Int32.shift_left 1l 31)));
+                    asm @@ FMovR (F32, XmmReg.xmm1, `Memory (address_of_constant_dword constants.dwords (Int32.shift_left 1l 31)));
                     asm @@ FBinOp (FXor, F32, XmmReg.xmm0, XmmReg.xmm1);
                 end
                 | Ir.F64 -> begin
-                    asm @@ FMov (F64, XmmReg.xmm1, `Memory (address_of_constant_qword constants.qwords (Int64.shift_left 1L 63)));
+                    asm @@ FMovR (F64, XmmReg.xmm1, `Memory (address_of_constant_qword constants.qwords (Int64.shift_left 1L 63)));
                     asm @@ FBinOp (FXor, F64, XmmReg.xmm0, XmmReg.xmm1);
                 end
                 | _ -> asm @@ UnaryOp (Neg, W64, IntReg.rax)
@@ -534,7 +547,7 @@ let emit_func func_table constants ir_func =
                 (* Zero out xmm1 or rcx *)
                 (match typ with
                 | Ir.F32 | Ir.F64 -> asm @@ FBinOp (FXor, F64, XmmReg.xmm1, XmmReg.xmm1)
-                | _ -> asm @@ BinOp (Xor, W64, IntReg.rcx, IntReg.rcx)
+                | _ -> asm @@ BinOpR (Xor, W64, IntReg.rcx, IntReg.rcx)
                 );
                 (* Compare rax/xmm0 to rcx/xmm1 *)
                 materialize_comparison typ "e";
