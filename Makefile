@@ -30,10 +30,10 @@ build/lexer.ml: build/lexer.mll
 	ocamllex build/lexer.mll
 
 build/minicc: $(BUILD_SOURCES)
-	ocamlopt -S -o build/minicc -I build $(BUILD_SOURCES)
+	ocamlopt unix.cmxa -g -S -o build/minicc -I build $(BUILD_SOURCES)
 
 build/bytecode_minicc: $(BUILD_SOURCES)
-	ocamlc -g -o build/bytecode_minicc -I build $(BUILD_SOURCES)
+	ocamlc unix.cma -g -o build/bytecode_minicc -I build $(BUILD_SOURCES)
 
 build/html/_timestamp: build/minicc $(BUILD_SOURCES)
 	rm -rf build/html
