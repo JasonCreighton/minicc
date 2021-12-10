@@ -185,7 +185,7 @@ let color_ifg ifg num_physical num_virtuals assignments = begin
     end
 end
 
-let allocate num_physical reg_classes insts = begin
+let allocate num_physical reg_classes precolorings insts = begin
     let num_insts = List.length insts in
     let num_virtuals = Array.length reg_classes in
 
@@ -199,8 +199,9 @@ let allocate num_physical reg_classes insts = begin
     (* Generate interference graph *)
     let ifg = create_ifg insts num_virtuals bit_live_out in
 
-    (* Registers in the range [0, num_physical) are precolored to a single physical register *)
-    let assignments = Array.init num_virtuals (fun i -> if i < num_physical then i else (-1)) in
+    (* Apply precolorings *)
+    let assignments = Array.make num_virtuals (-1) in
+    List.iter (fun (virt_idx, phys_idx) -> assignments.(virt_idx) <- phys_idx) precolorings;
 
     (* Add edges in the interference graph to account for register classes *)
     Array.iteri (fun reg_idx {from_idx; to_idx} ->
