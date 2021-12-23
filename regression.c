@@ -682,6 +682,79 @@ void test_array_of_pointers() {
     }
 }
 
+// See https://adventofcode.com/2015/day/22
+int dfs_min_mana_so_far;
+int dfs_calls;
+void dfs_player_won(int p_mana_spent) {
+    if(p_mana_spent < dfs_min_mana_so_far) {
+        printf("Found new best solution: %d\n", p_mana_spent);
+        dfs_min_mana_so_far = p_mana_spent;
+    }
+}
+
+void dfs(int players_turn, int p_hp, int p_mana_spent, int p_mana_earned, int b_hp, int t_shield, int t_poison, int t_recharge) {
+    ++dfs_calls;
+    if(p_mana_spent > p_mana_earned) return; // Should not have been allowed to cast this anyway
+    if(p_mana_spent > dfs_min_mana_so_far) return; // Prune
+    if(b_hp < 0) {
+        dfs_player_won(p_mana_spent);
+        return;
+    }
+    if(p_hp < 0) return; // Player lost
+
+    // Apply effects
+    int armor = t_shield > 0 ? 7 : 0;
+    if(t_poison > 0) b_hp = b_hp - 3;
+    if(t_recharge > 0) p_mana_earned = p_mana_earned + 101;
+
+    // Decrement effect counters
+    if(t_shield > 0) --t_shield;
+    if(t_poison > 0) --t_poison;
+    if(t_recharge > 0) --t_recharge;
+
+    if(b_hp < 0) {
+        dfs_player_won(p_mana_spent);
+        return;
+    }
+
+    if(players_turn) {
+        // Magic Missile
+        dfs(!players_turn, p_hp, p_mana_spent + 53, p_mana_earned, b_hp - 4, t_shield, t_poison, t_recharge);
+
+        // Drain
+        dfs(!players_turn, p_hp + 2, p_mana_spent + 73, p_mana_earned, b_hp - 2, t_shield, t_poison, t_recharge);
+
+        // Shield
+        if(t_shield == 0)
+            dfs(!players_turn, p_hp, p_mana_spent + 113, p_mana_earned, b_hp, 6, t_poison, t_recharge);
+
+        // Poison
+        if(t_poison == 0)
+            dfs(!players_turn, p_hp, p_mana_spent + 173, p_mana_earned, b_hp, t_shield, 6, t_recharge);
+
+        // Recharge
+        if(t_recharge == 0)
+            dfs(!players_turn, p_hp, p_mana_spent + 229, p_mana_earned, b_hp, t_shield, t_poison, 5);
+    } else {
+        // Boss's turn
+        int boss_damage = 8 - armor;
+        if(boss_damage < 1) boss_damage = 1;
+        dfs(!players_turn, p_hp - boss_damage, p_mana_spent, p_mana_earned, b_hp, t_shield, t_poison, t_recharge);
+    }
+}
+
+void test_depth_first_search() {
+    begin_test("test_depth_first_search");
+
+    dfs_calls = 0;
+    dfs_min_mana_so_far = 999999;
+
+    dfs(1, 50, 0, 500, 55, 0, 0, 0);
+
+    printf("Calls to dfs(): %d\n", dfs_calls);
+    printf("Minimum mana to win: %d\n", dfs_min_mana_so_far);
+}
+
 int main() {
     g_num_tests = 0;
 
@@ -705,6 +778,7 @@ int main() {
     test_jumps();
     test_print_primes();
     test_array_of_pointers();
+    test_depth_first_search();
 
     printf("=== Ran %d tests ===\n", g_num_tests);
 
